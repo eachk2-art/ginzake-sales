@@ -744,14 +744,24 @@ async function loadFromServer() {
       gasGet({ action: 'getRecords' }),
       gasGet({ action: 'getMasters' }),
     ]);
-    if (recRes.records) records = recRes.records.map(r => ({
-      ...r,
-      kg:     parseFloat(r.kg)     || 0,
-      tails:  parseInt(r.tails)    || 0,
-      price:  parseFloat(r.price)  || 0,
-      mawari: parseFloat(r.mawari) || 0,
-      amount: parseFloat(r.amount) || 0,
-    }));
+    if (recRes.records) records = recRes.records.map(r => {
+      // 日付を必ずYYYY-MM-DD文字列に正規化
+      let dt = r.date;
+      if (dt && typeof dt === 'object' && dt.getFullYear) {
+        dt = dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+      } else {
+        dt = String(dt||'').slice(0,10); // 先頭10文字だけ取る
+      }
+      return {
+        ...r,
+        date:   dt,
+        kg:     parseFloat(r.kg)     || 0,
+        tails:  parseInt(r.tails)    || 0,
+        price:  parseFloat(r.price)  || 0,
+        mawari: parseFloat(r.mawari) || 0,
+        amount: parseFloat(r.amount) || 0,
+      };
+    });
     if (masRes.masters && masRes.masters.companies) masters = masRes.masters;
     saveLocal();
     renderAll();
@@ -1103,13 +1113,18 @@ function renderSummaryGrid(elId, monthStr) {
 }
 
 function renderDailyTable(monthStr) {
+  // 日付×請求先でグループ化
   const dayMap = {};
   records.filter(r => String(r.date).startsWith(monthStr)).forEach(r => {
     const dt = String(r.date);
-    if (!dayMap[dt]) dayMap[dt] = {kg:0,tails:0,amount:0};
-    dayMap[dt].kg     += parseFloat(r.kg)||0;
-    dayMap[dt].tails  += parseInt(r.tails)||0;
-    dayMap[dt].amount += parseFloat(r.amount)||0;
+    if (!dayMap[dt]) dayMap[dt] = { total:{kg:0,tails:0,amount:0}, byCompany:{} };
+    dayMap[dt].total.kg     += parseFloat(r.kg)||0;
+    dayMap[dt].total.tails  += parseInt(r.tails)||0;
+    dayMap[dt].total.amount += parseFloat(r.amount)||0;
+    if (!dayMap[dt].byCompany[r.company]) dayMap[dt].byCompany[r.company]={kg:0,tails:0,amount:0,name:r.companyName||r.company};
+    dayMap[dt].byCompany[r.company].kg     += parseFloat(r.kg)||0;
+    dayMap[dt].byCompany[r.company].tails  += parseInt(r.tails)||0;
+    dayMap[dt].byCompany[r.company].amount += parseFloat(r.amount)||0;
   });
   const dates = Object.keys(dayMap).sort();
   if (dates.length === 0) {
@@ -1117,28 +1132,48 @@ function renderDailyTable(monthStr) {
       '<div class="empty-state"><div class="icon">📅</div><p>データがありません</p></div>';
     return;
   }
+
+  // 登場する請求先を収集
+  const companyKeys = [];
+  dates.forEach(dt => {
+    Object.keys(dayMap[dt].byCompany).forEach(k => { if (!companyKeys.includes(k)) companyKeys.push(k); });
+  });
+  // mastersの順番に並べる
+  const orderedKeys = (masters.companies||[]).map(c=>c.key).filter(k=>companyKeys.includes(k));
+  companyKeys.forEach(k=>{ if(!orderedKeys.includes(k)) orderedKeys.push(k); });
+
+  // ヘッダー
   let html = `<div style="overflow-x:auto"><table class="tbl"><thead><tr>
-    <th>日付</th><th class="r">数量(kg)</th><th class="r">尾数</th><th class="r">金額(円)</th>
-  </tr></thead><tbody>`;
+    <th>日付</th>`;
+  orderedKeys.forEach(k => {
+    const co = (masters.companies||[]).find(c=>c.key===k);
+    const name = co ? co.name.replace('株式会社','㈱').replace('有限会社','㈲') : k;
+    html += `<th class="r">${name}<br><span style="font-weight:400;font-size:0.68rem">kg</span></th>`;
+  });
+  html += `<th class="r">合計(kg)</th><th class="r">合計(円)</th></tr></thead><tbody>`;
+
   dates.forEach(dt => {
     const d = new Date(dt);
     const dow = ['日','月','火','水','木','金','土'][d.getDay()];
     const v = dayMap[dt];
-    html += `<tr>
-      <td>${d.getMonth()+1}/${d.getDate()}（${dow}）</td>
-      <td class="r">${v.kg.toLocaleString()}</td>
-      <td class="r">${v.tails}</td>
-      <td class="r">${v.amount.toLocaleString()}</td>
-    </tr>`;
+    html += `<tr><td>${d.getMonth()+1}/${d.getDate()}（${dow}）</td>`;
+    orderedKeys.forEach(k => {
+      const c = v.byCompany[k];
+      html += c ? `<td class="r">${c.kg.toLocaleString()}</td>` : `<td class="r" style="color:var(--text-light)">—</td>`;
+    });
+    html += `<td class="r" style="font-weight:700">${v.total.kg.toLocaleString()}</td>
+      <td class="r" style="font-weight:700">${v.total.amount.toLocaleString()}</td></tr>`;
   });
+
   // 合計行
-  const totKg = dates.reduce((s,dt)=>s+dayMap[dt].kg,0);
-  const totTl = dates.reduce((s,dt)=>s+dayMap[dt].tails,0);
-  const totAm = dates.reduce((s,dt)=>s+dayMap[dt].amount,0);
-  html += `<tr style="background:var(--ocean-light);font-weight:700">
-    <td>合計</td><td class="r">${totKg.toLocaleString()}</td>
-    <td class="r">${totTl}</td><td class="r">${totAm.toLocaleString()}</td>
-  </tr>`;
+  const totKg = dates.reduce((s,dt)=>s+dayMap[dt].total.kg,0);
+  const totAm = dates.reduce((s,dt)=>s+dayMap[dt].total.amount,0);
+  html += `<tr style="background:var(--ocean-light);font-weight:700"><td>合計</td>`;
+  orderedKeys.forEach(k => {
+    const kg = dates.reduce((s,dt)=>s+(dayMap[dt].byCompany[k]?dayMap[dt].byCompany[k].kg:0),0);
+    html += `<td class="r">${kg.toLocaleString()}</td>`;
+  });
+  html += `<td class="r">${totKg.toLocaleString()}</td><td class="r">${totAm.toLocaleString()}</td></tr>`;
   html += '</tbody></table></div>';
   document.getElementById('dailyTableContainer').innerHTML = html;
 }
