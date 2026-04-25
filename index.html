@@ -720,6 +720,32 @@ function loadLocal() {
   } catch(e) {}
 }
 
+
+// ===========================
+// 日付正規化（必ずYYYY-MM-DD文字列に）
+// ===========================
+function normalizeDate(val) {
+  if (!val) return '';
+  // すでにYYYY-MM-DD形式の文字列
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) return val.slice(0,10);
+  // Dateオブジェクト
+  if (val instanceof Date) {
+    const y = val.getFullYear();
+    const m = String(val.getMonth()+1).padStart(2,'0');
+    const d = String(val.getDate()).padStart(2,'0');
+    return y+'-'+m+'-'+d;
+  }
+  // その他の文字列（"Thu Apr 23 2026..."など）
+  const parsed = new Date(val);
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth()+1).padStart(2,'0');
+    const d = String(parsed.getDate()).padStart(2,'0');
+    return y+'-'+m+'-'+d;
+  }
+  return String(val).slice(0,10);
+}
+
 // ===========================
 // サーバー通信
 // ===========================
@@ -744,24 +770,15 @@ async function loadFromServer() {
       gasGet({ action: 'getRecords' }),
       gasGet({ action: 'getMasters' }),
     ]);
-    if (recRes.records) records = recRes.records.map(r => {
-      // 日付を必ずYYYY-MM-DD文字列に正規化
-      let dt = r.date;
-      if (dt && typeof dt === 'object' && dt.getFullYear) {
-        dt = dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
-      } else {
-        dt = String(dt||'').slice(0,10); // 先頭10文字だけ取る
-      }
-      return {
-        ...r,
-        date:   dt,
-        kg:     parseFloat(r.kg)     || 0,
-        tails:  parseInt(r.tails)    || 0,
-        price:  parseFloat(r.price)  || 0,
-        mawari: parseFloat(r.mawari) || 0,
-        amount: parseFloat(r.amount) || 0,
-      };
-    });
+    if (recRes.records) records = recRes.records.map(r => ({
+      ...r,
+      date:   normalizeDate(r.date),
+      kg:     parseFloat(r.kg)     || 0,
+      tails:  parseInt(r.tails)    || 0,
+      price:  parseFloat(r.price)  || 0,
+      mawari: parseFloat(r.mawari) || 0,
+      amount: parseFloat(r.amount) || 0,
+    }));
     if (masRes.masters && masRes.masters.companies) masters = masRes.masters;
     saveLocal();
     renderAll();
@@ -1011,7 +1028,7 @@ function renderList() {
   const month = parseInt(document.getElementById('listMonthFilter').value);
   const year  = new Date().getFullYear();
   const ms    = `${year}-${String(month).padStart(2,'0')}`;
-  const filtered = records.filter(r => String(r.date).startsWith(ms));
+  const filtered = records.filter(r => normalizeDate(r.date).startsWith(ms));
   const sorted   = [...filtered].sort((a,b) => String(a.date).localeCompare(String(b.date)) || String(a.id).localeCompare(String(b.id)));
 
   document.getElementById('listCount').textContent = sorted.length + ' 件';
@@ -1042,7 +1059,9 @@ function buildTableHTML(rows, compact) {
 
   rows.forEach(r => {
     const co  = (masters.companies||[]).find(c=>c.key===r.company) || {};
-    const dateStr = String(r.date).replace(/-/g,'/').replace(/^\d{4}\//,'');
+    const nd = normalizeDate(r.date);
+    const _dp = nd ? nd.split('-') : [];
+    const dateStr = _dp.length===3 ? `${parseInt(_dp[1])}/${parseInt(_dp[2])}` : nd;
     const cls = String(r.id) === String(editingId) ? ' class="editing-row"' : '';
     const badgeCls = r.company==='jyumonji'?'badge-j':r.company==='dai'?'badge-d':'badge-s';
     html += `<tr${cls}>
@@ -1087,7 +1106,7 @@ function renderSummaryPage() {
 function renderSummaryGrid(elId, monthStr) {
   const g = {};
   (masters.companies||[]).forEach(c => { g[c.key] = {kg:0,tails:0,amount:0}; });
-  records.filter(r => String(r.date).startsWith(monthStr)).forEach(r => {
+  records.filter(r => normalizeDate(r.date).startsWith(monthStr)).forEach(r => {
     if (!g[r.company]) g[r.company] = {kg:0,tails:0,amount:0};
     g[r.company].kg     += parseFloat(r.kg)||0;
     g[r.company].tails  += parseInt(r.tails)||0;
@@ -1115,8 +1134,8 @@ function renderSummaryGrid(elId, monthStr) {
 function renderDailyTable(monthStr) {
   // 日付×請求先でグループ化
   const dayMap = {};
-  records.filter(r => String(r.date).startsWith(monthStr)).forEach(r => {
-    const dt = String(r.date);
+  records.filter(r => normalizeDate(r.date).startsWith(monthStr)).forEach(r => {
+    const dt = normalizeDate(r.date);
     if (!dayMap[dt]) dayMap[dt] = { total:{kg:0,tails:0,amount:0}, byCompany:{} };
     dayMap[dt].total.kg     += parseFloat(r.kg)||0;
     dayMap[dt].total.tails  += parseInt(r.tails)||0;
@@ -1190,8 +1209,8 @@ function renderCalendar() {
   const todayStr = new Date().toISOString().slice(0,10);
 
   const dayMap = {};
-  records.filter(r => String(r.date).startsWith(ms)).forEach(r => {
-    const dt = String(r.date);
+  records.filter(r => normalizeDate(r.date).startsWith(ms)).forEach(r => {
+    const dt = normalizeDate(r.date);
     if (!dayMap[dt]) dayMap[dt] = {};
     (masters.companies||[]).forEach(c => { if (!dayMap[dt][c.key]) dayMap[dt][c.key]={kg:0,tails:0,amount:0}; });
     if (!dayMap[dt][r.company]) dayMap[dt][r.company]={kg:0,tails:0,amount:0};
@@ -1415,7 +1434,7 @@ function downloadExcel() {
   const month = parseInt(document.getElementById('downloadMonth').value);
   const year  = new Date().getFullYear();
   const ms    = `${year}-${String(month).padStart(2,'0')}`;
-  const target = records.filter(r => String(r.date).startsWith(ms));
+  const target = records.filter(r => normalizeDate(r.date).startsWith(ms));
   if (target.length === 0) { showToast(`${month}月のデータはありません`); return; }
 
   const sorted  = [...target].sort((a,b) => String(a.date).localeCompare(String(b.date)));
