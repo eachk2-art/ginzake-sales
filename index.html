@@ -683,11 +683,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // ローカルキャッシュから先に表示
-  loadLocal();
-  renderAll();
-
-  // サーバーから最新データ取得
+  // サーバーから最新データを取得してから描画
+  // （ローカルキャッシュは使わない）
+  localStorage.removeItem(STORAGE_KEY);
   await loadFromServer();
 });
 
@@ -779,6 +777,9 @@ async function loadFromServer() {
       mawari: parseFloat(r.mawari) || 0,
       amount: parseFloat(r.amount) || 0,
     }));
+    // 日付の正規化確認（デバッグ用）
+    console.log('読み込んだレコード数:', records.length);
+    if (records.length > 0) console.log('最初のレコードの日付:', records[0].date);
     if (masRes.masters && masRes.masters.companies) masters = masRes.masters;
     saveLocal();
     renderAll();
