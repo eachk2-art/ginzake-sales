@@ -722,31 +722,48 @@ function loadLocal() {
 // ===========================
 // 日付正規化（必ずYYYY-MM-DD文字列に）
 // ===========================
-function normalizeDate(val) {
+function normalizeDate(val, id) {
   if (!val) return '';
-  const s = String(val);
-  // すでにYYYY-MM-DD形式
+  const s = String(val).trim();
+
+  // YYYY-MM-DD 形式（理想）
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
-  // Dateオブジェクト → UTCではなくローカル日付で取得
+
+  // YYYY/MM/DD 形式
+  if (/^\d{4}\/\d{2}\/\d{2}/.test(s)) return s.slice(0,10).replace(/\//g,'-');
+
+  // Dateオブジェクト
   if (val instanceof Date) {
     const y = val.getFullYear();
     const m = String(val.getMonth()+1).padStart(2,'0');
     const d = String(val.getDate()).padStart(2,'0');
     return y+'-'+m+'-'+d;
   }
-  // "2026/04/23" 形式
-  if (/^\d{4}\/\d{2}\/\d{2}/.test(s)) return s.slice(0,10).replace(/\//g,'-');
-  // その他（英語日付文字列など）
-  // タイムゾーンずれを防ぐため、年月日を正規表現で直接抽出
-  const m1 = s.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
-  if (m1) return m1[1]+'-'+m1[2].padStart(2,'0')+'-'+m1[3].padStart(2,'0');
-  // 英語月名を含む場合（例: "Apr 23, 2026" や "Thu Apr 23 2026"）
+
+  // 月名マップ
   const months = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',
                   Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+
+  // "Thu Apr 23" のように年がない場合 → IDのタイムスタンプから年を取得
+  const m3 = s.match(/(?:\w+\s+)?([A-Z][a-z]{2})\s+(\d{1,2})$/);
+  if (m3 && months[m3[1]]) {
+    // IDがタイムスタンプ（ミリ秒）の場合、そこから年を取得
+    let year = new Date().getFullYear();
+    if (id) {
+      const ts = parseInt(id);
+      if (!isNaN(ts) && ts > 1000000000000) {
+        year = new Date(ts).getFullYear();
+      }
+    }
+    return year+'-'+months[m3[1]]+'-'+m3[2].padStart(2,'0');
+  }
+
+  // "Apr 23, 2026" や "Thu Apr 23 2026" のように年あり
   const m2 = s.match(/([A-Z][a-z]{2})\s+(\d{1,2})[,\s]+(\d{4})/);
   if (m2 && months[m2[1]]) return m2[3]+'-'+months[m2[1]]+'-'+m2[2].padStart(2,'0');
-  const m3 = s.match(/\w+\s+([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{4})/);
-  if (m3 && months[m3[1]]) return m3[3]+'-'+months[m3[1]]+'-'+m3[2].padStart(2,'0');
+  const m4 = s.match(/\w+\s+([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{4})/);
+  if (m4 && months[m4[1]]) return m4[3]+'-'+months[m4[1]]+'-'+m4[2].padStart(2,'0');
+
   return s.slice(0,10);
 }
 
@@ -776,7 +793,7 @@ async function loadFromServer() {
     ]);
     if (recRes.records) records = recRes.records.map(r => ({
       ...r,
-      date:   normalizeDate(r.date),
+      date:   normalizeDate(r.date, r.id),
       kg:     parseFloat(r.kg)     || 0,
       tails:  parseInt(r.tails)    || 0,
       price:  parseFloat(r.price)  || 0,
