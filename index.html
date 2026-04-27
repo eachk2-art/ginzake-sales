@@ -724,24 +724,30 @@ function loadLocal() {
 // ===========================
 function normalizeDate(val) {
   if (!val) return '';
-  // すでにYYYY-MM-DD形式の文字列
-  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) return val.slice(0,10);
-  // Dateオブジェクト
+  const s = String(val);
+  // すでにYYYY-MM-DD形式
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  // Dateオブジェクト → UTCではなくローカル日付で取得
   if (val instanceof Date) {
     const y = val.getFullYear();
     const m = String(val.getMonth()+1).padStart(2,'0');
     const d = String(val.getDate()).padStart(2,'0');
     return y+'-'+m+'-'+d;
   }
-  // その他の文字列（"Thu Apr 23 2026..."など）
-  const parsed = new Date(val);
-  if (!isNaN(parsed.getTime())) {
-    const y = parsed.getFullYear();
-    const m = String(parsed.getMonth()+1).padStart(2,'0');
-    const d = String(parsed.getDate()).padStart(2,'0');
-    return y+'-'+m+'-'+d;
-  }
-  return String(val).slice(0,10);
+  // "2026/04/23" 形式
+  if (/^\d{4}\/\d{2}\/\d{2}/.test(s)) return s.slice(0,10).replace(/\//g,'-');
+  // その他（英語日付文字列など）
+  // タイムゾーンずれを防ぐため、年月日を正規表現で直接抽出
+  const m1 = s.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (m1) return m1[1]+'-'+m1[2].padStart(2,'0')+'-'+m1[3].padStart(2,'0');
+  // 英語月名を含む場合（例: "Apr 23, 2026" や "Thu Apr 23 2026"）
+  const months = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',
+                  Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+  const m2 = s.match(/([A-Z][a-z]{2})\s+(\d{1,2})[,\s]+(\d{4})/);
+  if (m2 && months[m2[1]]) return m2[3]+'-'+months[m2[1]]+'-'+m2[2].padStart(2,'0');
+  const m3 = s.match(/\w+\s+([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{4})/);
+  if (m3 && months[m3[1]]) return m3[3]+'-'+months[m3[1]]+'-'+m3[2].padStart(2,'0');
+  return s.slice(0,10);
 }
 
 // ===========================
@@ -777,9 +783,15 @@ async function loadFromServer() {
       mawari: parseFloat(r.mawari) || 0,
       amount: parseFloat(r.amount) || 0,
     }));
-    // 日付の正規化確認（デバッグ用）
+    // デバッグログ
     console.log('読み込んだレコード数:', records.length);
-    if (records.length > 0) console.log('最初のレコードの日付:', records[0].date);
+    if (records.length > 0) {
+      console.log('最初のレコードのdate（生）:', recRes.records[0].date);
+      console.log('最初のレコードのdate（正規化後）:', records[0].date);
+      const ms = new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0');
+      console.log('今月のフィルター文字列:', ms);
+      console.log('今月一致件数:', records.filter(r=>r.date.startsWith(ms)).length);
+    }
     if (masRes.masters && masRes.masters.companies) masters = masRes.masters;
     saveLocal();
     renderAll();
