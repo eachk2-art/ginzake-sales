@@ -1482,14 +1482,14 @@ function downloadExcel() {
   rows.push(['', '雄勝湾支所 阿部優一郎 ギンザケ小口販売状況', '', '', '', '', `${year}/${month}/${lastDay}`]);
   rows.push(['', '', '', '', '', '', '太協物産（株）']);
   rows.push([]);
-  rows.push(['', '日付', '販売先', '数量（kg）', '単価（円）', '尾数', '目回り']);
+  rows.push(['', '日付', '販売先', '納品先', '数量（kg）', '単価（円）', '尾数', '目回り']);
   sorted.forEach(r => {
     const d = new Date(r.date);
-    rows.push(['', `${d.getMonth()+1}/${d.getDate()}`, r.companyName||r.company, r.kg, r.price, r.tails, r.mawari]);
+    rows.push(['', `${d.getMonth()+1}/${d.getDate()}`, r.companyName||r.company, r.storeName||'', r.kg, r.price, r.tails, r.mawari]);
   });
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{wch:4},{wch:10},{wch:24},{wch:12},{wch:12},{wch:10},{wch:10}];
+  ws['!cols'] = [{wch:4},{wch:10},{wch:24},{wch:18},{wch:12},{wch:12},{wch:10},{wch:10}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, `${month}月`);
   XLSX.writeFile(wb, `雄勝湾支所_阿部優一郎_ギンザケ小口販売状況_${year}${String(month).padStart(2,'0')}.xlsx`);
