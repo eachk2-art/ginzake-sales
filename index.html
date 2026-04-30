@@ -669,7 +669,10 @@ let pendingDeleteId = null;
 // ===========================
 window.addEventListener('DOMContentLoaded', async () => {
   const today = new Date();
-  document.getElementById('inputDate').value = today.toISOString().slice(0,10);
+  // 日本時間で今日の日付を取得（UTC+9）
+  const jstOffset = 9 * 60;
+  const jstNow = new Date(today.getTime() + (jstOffset - (-today.getTimezoneOffset())) * 60000);
+  document.getElementById('inputDate').value = jstNow.toISOString().slice(0,10);
 
   // 月セレクト初期化
   ['downloadMonth','summaryMonth','listMonthFilter'].forEach(id => {
@@ -1198,8 +1201,9 @@ function renderDailyTable(monthStr) {
     const co = (masters.companies||[]).find(c=>c.key===k);
     const name = co ? co.name.replace('株式会社','㈱').replace('有限会社','㈲') : k;
     html += `<th class="r">${name}<br><span style="font-weight:400;font-size:0.68rem">kg</span></th>`;
+    html += `<th class="r"><span style="font-weight:400;font-size:0.68rem">尾</span></th>`;
   });
-  html += `<th class="r">合計(kg)</th><th class="r">合計(円)</th></tr></thead><tbody>`;
+  html += `<th class="r">合計kg</th><th class="r">合計尾</th><th class="r">合計金額</th></tr></thead><tbody>`;
 
   dates.forEach(dt => {
     const d = new Date(dt);
@@ -1208,21 +1212,25 @@ function renderDailyTable(monthStr) {
     html += `<tr><td>${d.getMonth()+1}/${d.getDate()}（${dow}）</td>`;
     orderedKeys.forEach(k => {
       const c = v.byCompany[k];
-      html += c ? `<td class="r">${c.kg.toLocaleString()}</td>` : `<td class="r" style="color:var(--text-light)">—</td>`;
+      html += c ? `<td class="r">${c.kg.toLocaleString()}</td><td class="r">${c.tails}</td>`
+                : `<td class="r" style="color:var(--text-light)">—</td><td class="r" style="color:var(--text-light)">—</td>`;
     });
     html += `<td class="r" style="font-weight:700">${v.total.kg.toLocaleString()}</td>
+      <td class="r" style="font-weight:700">${v.total.tails}</td>
       <td class="r" style="font-weight:700">${v.total.amount.toLocaleString()}</td></tr>`;
   });
 
   // 合計行
   const totKg = dates.reduce((s,dt)=>s+dayMap[dt].total.kg,0);
+  const totTl = dates.reduce((s,dt)=>s+dayMap[dt].total.tails,0);
   const totAm = dates.reduce((s,dt)=>s+dayMap[dt].total.amount,0);
   html += `<tr style="background:var(--ocean-light);font-weight:700"><td>合計</td>`;
   orderedKeys.forEach(k => {
     const kg = dates.reduce((s,dt)=>s+(dayMap[dt].byCompany[k]?dayMap[dt].byCompany[k].kg:0),0);
-    html += `<td class="r">${kg.toLocaleString()}</td>`;
+    const tl = dates.reduce((s,dt)=>s+(dayMap[dt].byCompany[k]?dayMap[dt].byCompany[k].tails:0),0);
+    html += `<td class="r">${kg.toLocaleString()}</td><td class="r">${tl}</td>`;
   });
-  html += `<td class="r">${totKg.toLocaleString()}</td><td class="r">${totAm.toLocaleString()}</td></tr>`;
+  html += `<td class="r">${totKg.toLocaleString()}</td><td class="r">${totTl}</td><td class="r">${totAm.toLocaleString()}</td></tr>`;
   html += '</tbody></table></div>';
   document.getElementById('dailyTableContainer').innerHTML = html;
 }
