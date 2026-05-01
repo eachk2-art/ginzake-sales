@@ -180,8 +180,14 @@ input[type="date"] { cursor: pointer; }
 /* 編集モード */
 .edit-mode .card-body { background: var(--edit-bg); }
 .edit-badge {
-  background: var(--edit-bd); color: #6b4800;
-  font-size: 0.68rem; font-weight: 700; padding: 3px 10px; border-radius: 20px;
+  background: var(--edit-bd); color: #5a3a00;
+  font-size: 0.95rem; font-weight: 700; padding: 7px 18px; border-radius: 24px;
+  animation: blink 1.2s ease-in-out infinite;
+  box-shadow: 0 2px 8px rgba(212,168,32,0.5);
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
 }
 .save-ind { font-size: 0.7rem; color: var(--green); opacity: 0; transition: opacity 0.4s; }
 .save-ind.on { opacity: 1; }
@@ -370,13 +376,14 @@ input[type="date"] { cursor: pointer; }
 
 /* ===== 接続状態 ===== */
 .conn-badge {
-  font-size: 0.68rem; font-weight: 700; padding: 3px 10px; border-radius: 20px;
-  display: flex; align-items: center; gap: 5px;
+  font-size: 0.88rem; font-weight: 700; padding: 7px 16px; border-radius: 24px;
+  display: flex; align-items: center; gap: 7px;
+  border: 2px solid rgba(255,255,255,0.3);
 }
-.conn-badge.ok  { background: var(--green-l); color: var(--green); }
-.conn-badge.err { background: var(--red-l);   color: var(--red); }
-.conn-badge.loading { background: var(--ocean-light); color: var(--ocean); }
-.conn-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.conn-badge.ok  { background: var(--green); color: white; }
+.conn-badge.err { background: var(--red);   color: white; }
+.conn-badge.loading { background: rgba(255,255,255,0.2); color: white; }
+.conn-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 
 /* ===== TOAST ===== */
 .toast {
