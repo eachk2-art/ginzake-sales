@@ -676,10 +676,12 @@ let pendingDeleteId = null;
 // ===========================
 window.addEventListener('DOMContentLoaded', async () => {
   const today = new Date();
-  // 日本時間で今日の日付を取得（UTC+9）
-  const jstOffset = 9 * 60;
-  const jstNow = new Date(today.getTime() + (jstOffset - (-today.getTimezoneOffset())) * 60000);
-  document.getElementById('inputDate').value = jstNow.toISOString().slice(0,10);
+  // 日本時間で今日の日付を取得（ロケール書式から直接取る）
+  const jstStr = today.toLocaleDateString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).replace(/\//g, '-'); // "2026-05-01" 形式
+  document.getElementById('inputDate').value = jstStr;
 
   // 月セレクト初期化
   ['downloadMonth','summaryMonth','listMonthFilter'].forEach(id => {
