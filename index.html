@@ -1094,7 +1094,7 @@ function buildTableHTML(rows, compact) {
   }
   let html = `<div style="overflow-x:auto"><table class="tbl"><thead><tr>
     <th>日付</th><th>納品先</th><th class="hide-sp">請求先</th>
-    <th class="r">kg</th><th class="r hide-sp">尾数</th>
+    <th class="r">kg</th><th class="r">尾数</th>
     <th class="r hide-sp">目回り</th><th class="r hide-sp">単価</th><th class="r">金額</th>
     <th class="c">操作</th>
   </tr></thead><tbody>`;
@@ -1111,7 +1111,7 @@ function buildTableHTML(rows, compact) {
       <td>${r.storeName||'—'}</td>
       <td class="hide-sp"><span class="badge ${badgeCls}">${co.name||r.company||'—'}</span></td>
       <td class="r">${(r.kg||0).toLocaleString()}</td>
-      <td class="r hide-sp">${r.tails||0}</td>
+      <td class="r">${r.tails||0}</td>
       <td class="r hide-sp">${r.mawari||0}</td>
       <td class="r hide-sp">${(r.price||0).toLocaleString()}</td>
       <td class="r">${(r.amount||0).toLocaleString()}</td>
