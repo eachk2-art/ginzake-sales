@@ -1028,9 +1028,9 @@ function closeDeleteModal() {
   document.getElementById('deleteModal').classList.remove('open');
 }
 async function confirmDelete() {
-  closeDeleteModal();
   if (!pendingDeleteId) return;
   const id = pendingDeleteId;
+  closeDeleteModal();
   try {
     const res = await gasPost({ action: 'deleteRecord', id });
     if (res.success) {
