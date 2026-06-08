@@ -732,6 +732,16 @@ function loadLocal() {
 
 
 // ===========================
+// 日本時間で今日の日付を取得
+// ===========================
+function todayJST() {
+  return new Date().toLocaleDateString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).replace(/\//g, '-');
+}
+
+// ===========================
 // 日付正規化（必ずYYYY-MM-DD文字列に）
 // ===========================
 function normalizeDate(val, id) {
@@ -897,7 +907,7 @@ function onStoreChange() {
   if (storeKey && editingId === null) {
     const store = (masters.stores || []).find(s => s.key === storeKey);
     if (store) {
-      const price = getPriceForCompany(store.companyKey, dateStr || new Date().toISOString().slice(0,10));
+      const price = getPriceForCompany(store.companyKey, dateStr || todayJST());
       document.getElementById('inputPrice').value = price;
     }
   }
@@ -1253,7 +1263,7 @@ function calNext() { calMonth++; if(calMonth>12){calMonth=1;calYear++;} selected
 function renderCalendar() {
   document.getElementById('calMonthLabel').textContent = `${calYear}年 ${calMonth}月`;
   const ms = `${calYear}-${String(calMonth).padStart(2,'0')}`;
-  const todayStr = new Date().toISOString().slice(0,10);
+  const todayStr = todayJST();
 
   const dayMap = {};
   records.filter(r => normalizeDate(r.date).startsWith(ms)).forEach(r => {
@@ -1380,7 +1390,7 @@ function renderStoreList() {
 function renderPriceList() {
   const el = document.getElementById('priceList');
   el.innerHTML = (masters.companies||[]).map(c => {
-    const current = getPriceForCompany(c.key, new Date().toISOString().slice(0,10));
+    const current = getPriceForCompany(c.key, todayJST());
     return `<div class="price-item">
       <span class="price-co-name">${c.name}</span>
       <span class="price-val">${current.toLocaleString()}円</span>
@@ -1431,7 +1441,7 @@ function removeStore(key) {
 let priceTargetKey = null;
 function openPriceModal(companyKey, companyName, currentPrice) {
   priceTargetKey = companyKey;
-  const today = new Date().toISOString().slice(0,10);
+  const today = todayJST();
   const html = `
     <div style="margin-bottom:12px">
       <strong>${companyName}</strong> の単価を変更します
