@@ -627,10 +627,34 @@ input[type="date"] { cursor: pointer; }
   </div>
 
   <div class="card">
-    <div class="card-head"><span class="card-title">単価設定</span></div>
+    <div class="card-head"><span class="card-title">単価グループ</span></div>
     <div class="card-body">
-      <p style="font-size:0.78rem;color:var(--text-mid);margin-bottom:14px">変更した日付以降の入力に新しい単価が適用されます。過去のデータは変わりません。</p>
-      <div id="priceList"></div>
+      <p style="font-size:0.78rem;color:var(--text-mid);margin-bottom:14px">納品先ごとにグループを設定します。グループの単価を変えると、そのグループ全店に反映されます。</p>
+      <div id="priceGroupList"></div>
+      <div style="margin-top:14px">
+        <div class="add-form">
+          <div class="form-group">
+            <span class="form-label">グループ名</span>
+            <input type="text" id="newGroupName" placeholder="例：グループA">
+          </div>
+          <div class="form-group">
+            <span class="form-label">単価（円）</span>
+            <div class="input-wrap">
+              <input type="number" id="newGroupPrice" min="0" step="1" placeholder="900">
+              <span class="input-unit">円</span>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="addPriceGroup()">＋ 追加</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span class="card-title">納品先のグループ設定</span></div>
+    <div class="card-body">
+      <p style="font-size:0.78rem;color:var(--text-mid);margin-bottom:14px">各納品先がどの単価グループに属するか設定します。</p>
+      <div id="storeGroupList"></div>
     </div>
   </div>
 
@@ -831,7 +855,27 @@ async function loadFromServer() {
       console.log('今月のフィルター文字列:', ms);
       console.log('今月一致件数:', records.filter(r=>r.date.startsWith(ms)).length);
     }
-    if (masRes.masters && masRes.masters.companies) masters = masRes.masters;
+    if (masRes.masters && masRes.masters.companies) {
+      masters = masRes.masters;
+      // 旧形式（prices）から新形式（groups/priceGroups）への自動移行
+      if (!masters.groups || masters.groups.length === 0) {
+        masters.groups = [
+          { key: 'grp_a', name: 'グループA（900円）' },
+          { key: 'grp_b', name: 'グループB（850円）' },
+          { key: 'grp_c', name: 'グループC（1000円）' },
+        ];
+        masters.priceGroups = [
+          { groupKey: 'grp_a', price: 900,  from: '2025-01-01' },
+          { groupKey: 'grp_b', price: 850,  from: '2025-01-01' },
+          { groupKey: 'grp_c', price: 1000, from: '2025-01-01' },
+        ];
+        // 納品先にグループを自動割り当て
+        const companyToGroup = { jyumonji: 'grp_a', dai: 'grp_b', saiki: 'grp_c' };
+        (masters.stores||[]).forEach(s => {
+          if (!s.priceGroupKey) s.priceGroupKey = companyToGroup[s.companyKey] || '';
+        });
+      }
+    }
     saveLocal();
     renderAll();
     setConn('ok', '接続済み');
@@ -858,13 +902,25 @@ function setConn(status, text) {
 }
 
 // ===========================
-// 単価取得（日付ベース）
+// 単価取得（日付ベース・納品先グループ）
 // ===========================
-function getPriceForCompany(companyKey, dateStr) {
-  const applicable = (masters.prices || [])
-    .filter(p => p.companyKey === companyKey && p.from <= dateStr)
+function getPriceForStore(storeKey, dateStr) {
+  const store = (masters.stores || []).find(s => s.key === storeKey);
+  if (!store) return 0;
+  const groupKey = store.priceGroupKey || store.companyKey; // 移行互換
+  return getPriceForGroup(groupKey, dateStr);
+}
+
+function getPriceForGroup(groupKey, dateStr) {
+  const applicable = (masters.priceGroups || masters.prices || [])
+    .filter(p => (p.groupKey || p.companyKey) === groupKey && p.from <= dateStr)
     .sort((a,b) => b.from.localeCompare(a.from));
   return applicable.length > 0 ? applicable[0].price : 0;
+}
+
+function getGroupName(groupKey) {
+  const g = (masters.groups || []).find(g => g.key === groupKey);
+  return g ? g.name : groupKey;
 }
 
 // ===========================
@@ -907,7 +963,7 @@ function onStoreChange() {
   if (storeKey && editingId === null) {
     const store = (masters.stores || []).find(s => s.key === storeKey);
     if (store) {
-      const price = getPriceForCompany(store.companyKey, dateStr || todayJST());
+      const price = getPriceForStore(storeKey, dateStr || todayJST());
       document.getElementById('inputPrice').value = price;
     }
   }
@@ -1361,7 +1417,8 @@ function toggleTable(wrapId, arrowId) {
 function renderSettings() {
   renderCompanyList();
   renderStoreList();
-  renderPriceList();
+  renderPriceGroupList();
+  renderStoreGroupList();
 }
 
 function renderCompanyList() {
@@ -1387,17 +1444,111 @@ function renderStoreList() {
   }).join('') || '<div style="font-size:0.8rem;color:var(--text-light)">登録なし</div>';
 }
 
-function renderPriceList() {
-  const el = document.getElementById('priceList');
-  el.innerHTML = (masters.companies||[]).map(c => {
-    const current = getPriceForCompany(c.key, todayJST());
+function renderPriceGroupList() {
+  const el = document.getElementById('priceGroupList');
+  if (!el) return;
+  const groups = masters.groups || [];
+  el.innerHTML = groups.map(g => {
+    const current = getPriceForGroup(g.key, todayJST());
     return `<div class="price-item">
-      <span class="price-co-name">${c.name}</span>
+      <span class="price-co-name">${g.name}</span>
       <span class="price-val">${current.toLocaleString()}円</span>
       <span class="price-from">現在の単価</span>
-      <button class="btn btn-success btn-sm" onclick="openPriceModal('${c.key}','${c.name}',${current})">変更</button>
+      <button class="btn btn-success btn-sm" onclick="openGroupPriceModal('${g.key}','${g.name}',${current})">変更</button>
+      <button class="btn btn-danger btn-sm" onclick="removePriceGroup('${g.key}')">削除</button>
     </div>`;
-  }).join('') || '<div style="font-size:0.8rem;color:var(--text-light)">取引先を先に登録してください</div>';
+  }).join('') || '<div style="font-size:0.8rem;color:var(--text-light)">グループが登録されていません</div>';
+}
+
+function renderStoreGroupList() {
+  const el = document.getElementById('storeGroupList');
+  if (!el) return;
+  const groups = masters.groups || [];
+  el.innerHTML = (masters.stores||[]).map(s => {
+    const currentGroup = s.priceGroupKey || s.companyKey;
+    const opts = groups.map(g =>
+      `<option value="${g.key}" ${g.key===currentGroup?'selected':''}>${g.name}</option>`
+    ).join('');
+    return `<div class="master-item">
+      <span class="master-item-name" style="min-width:140px">${s.name}</span>
+      <select style="width:auto;padding:6px 10px;font-size:0.82rem" onchange="updateStoreGroup('${s.key}',this.value)">
+        <option value="">未設定</option>${opts}
+      </select>
+    </div>`;
+  }).join('') || '<div style="font-size:0.8rem;color:var(--text-light)">納品先を先に登録してください</div>';
+}
+
+function addPriceGroup() {
+  const name  = document.getElementById('newGroupName').value.trim();
+  const price = parseFloat(document.getElementById('newGroupPrice').value);
+  if (!name)        { showToast('グループ名を入力してください'); return; }
+  if (!price||price<=0) { showToast('単価を入力してください'); return; }
+  const key = 'grp_' + Date.now();
+  if (!masters.groups) masters.groups = [];
+  if (!masters.priceGroups) masters.priceGroups = [];
+  masters.groups.push({ key, name });
+  masters.priceGroups.push({ groupKey: key, price, from: todayJST() });
+  document.getElementById('newGroupName').value  = '';
+  document.getElementById('newGroupPrice').value = '';
+  renderSettings();
+  showToast(`${name} を追加しました`);
+}
+
+function removePriceGroup(key) {
+  masters.groups       = (masters.groups||[]).filter(g => g.key !== key);
+  masters.priceGroups  = (masters.priceGroups||[]).filter(p => p.groupKey !== key);
+  // グループが削除されたら該当納品先のpriceGroupKeyをクリア
+  (masters.stores||[]).forEach(s => { if (s.priceGroupKey === key) s.priceGroupKey = ''; });
+  renderSettings();
+  showToast('削除しました');
+}
+
+function updateStoreGroup(storeKey, groupKey) {
+  const store = (masters.stores||[]).find(s => s.key === storeKey);
+  if (store) store.priceGroupKey = groupKey;
+  showToast('グループを更新しました');
+}
+
+function openGroupPriceModal(groupKey, groupName, currentPrice) {
+  priceTargetKey = groupKey;
+  const today = todayJST();
+  document.querySelector('#deleteModal .modal').innerHTML = `
+    <h3>単価の変更</h3>
+    <div style="margin-bottom:12px"><strong>${groupName}</strong> の単価を変更します</div>
+    <div style="display:grid;gap:10px">
+      <div class="form-group">
+        <span class="form-label">新しい単価（円）</span>
+        <div class="input-wrap"><input type="number" id="newPriceVal" value="${currentPrice}" min="0" step="1"><span class="input-unit">円</span></div>
+      </div>
+      <div class="form-group">
+        <span class="form-label">適用開始日</span>
+        <input type="date" id="newPriceFrom" value="${today}">
+      </div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="closeDeleteModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="applyGroupPriceChange('${groupKey}')">適用</button>
+    </div>`;
+  document.getElementById('deleteModal').classList.add('open');
+}
+
+function applyGroupPriceChange(groupKey) {
+  const price = parseFloat(document.getElementById('newPriceVal').value);
+  const from  = document.getElementById('newPriceFrom').value;
+  if (!price||price<=0) { showToast('単価を入力してください'); return; }
+  if (!from)            { showToast('適用開始日を入力してください'); return; }
+  if (!masters.priceGroups) masters.priceGroups = [];
+  masters.priceGroups.push({ groupKey, price, from });
+  closeDeleteModal();
+  document.querySelector('#deleteModal .modal').innerHTML = `
+    <h3>削除の確認</h3>
+    <p style="font-size:0.88rem;color:var(--text-mid)" id="deleteModalMsg"></p>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="closeDeleteModal()">キャンセル</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">削除する</button>
+    </div>`;
+  renderSettings();
+  showToast(`${from} から ${price.toLocaleString()}円 に変更しました`);
 }
 
 function addCompany() {
@@ -1437,52 +1588,7 @@ function removeStore(key) {
   buildStoreSelect();
 }
 
-// 単価変更
 let priceTargetKey = null;
-function openPriceModal(companyKey, companyName, currentPrice) {
-  priceTargetKey = companyKey;
-  const today = todayJST();
-  const html = `
-    <div style="margin-bottom:12px">
-      <strong>${companyName}</strong> の単価を変更します
-    </div>
-    <div style="display:grid;gap:10px">
-      <div class="form-group">
-        <span class="form-label">新しい単価（円）</span>
-        <div class="input-wrap"><input type="number" id="newPriceVal" value="${currentPrice}" min="0" step="1"><span class="input-unit">円</span></div>
-      </div>
-      <div class="form-group">
-        <span class="form-label">適用開始日</span>
-        <input type="date" id="newPriceFrom" value="${today}">
-      </div>
-    </div>`;
-  document.querySelector('#deleteModal .modal').innerHTML = `
-    <h3>単価の変更</h3>${html}
-    <div class="modal-btns">
-      <button class="btn btn-secondary" onclick="closeDeleteModal()">キャンセル</button>
-      <button class="btn btn-primary" onclick="applyPriceChange()">適用</button>
-    </div>`;
-  document.getElementById('deleteModal').classList.add('open');
-}
-
-function applyPriceChange() {
-  const price = parseFloat(document.getElementById('newPriceVal').value);
-  const from  = document.getElementById('newPriceFrom').value;
-  if (!price || price <= 0) { showToast('単価を入力してください'); return; }
-  if (!from) { showToast('適用開始日を入力してください'); return; }
-  masters.prices.push({ companyKey: priceTargetKey, price, from });
-  closeDeleteModal();
-  // モーダルのHTMLを元に戻す
-  document.querySelector('#deleteModal .modal').innerHTML = `
-    <h3>削除の確認</h3>
-    <p style="font-size:0.88rem;color:var(--text-mid)" id="deleteModalMsg"></p>
-    <div class="modal-btns">
-      <button class="btn btn-secondary" onclick="closeDeleteModal()">キャンセル</button>
-      <button class="btn btn-danger" onclick="confirmDelete()">削除する</button>
-    </div>`;
-  renderSettings();
-  showToast(`${from} から ${price.toLocaleString()}円 に変更しました`);
-}
 
 // ===========================
 // Excelダウンロード
