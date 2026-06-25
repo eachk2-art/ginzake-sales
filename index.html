@@ -1212,13 +1212,30 @@ function renderSummaryPage() {
 }
 
 function renderSummaryGrid(elId, monthStr) {
+  // 請求先ごとの合計
   const g = {};
+  // 請求先×単価ごとの集計
+  const gByPrice = {};
+
   (masters.companies||[]).forEach(c => { g[c.key] = {kg:0,tails:0,amount:0}; });
+
   records.filter(r => normalizeDate(r.date).startsWith(monthStr)).forEach(r => {
     if (!g[r.company]) g[r.company] = {kg:0,tails:0,amount:0};
     g[r.company].kg     += parseFloat(r.kg)||0;
     g[r.company].tails  += parseInt(r.tails)||0;
     g[r.company].amount += parseFloat(r.amount)||0;
+
+    // 単価別集計
+    const priceKey = r.company + '_' + (parseFloat(r.price)||0);
+    if (!gByPrice[priceKey]) {
+      gByPrice[priceKey] = {
+        company: r.company, price: parseFloat(r.price)||0,
+        kg:0, tails:0, amount:0
+      };
+    }
+    gByPrice[priceKey].kg     += parseFloat(r.kg)||0;
+    gByPrice[priceKey].tails  += parseInt(r.tails)||0;
+    gByPrice[priceKey].amount += parseFloat(r.amount)||0;
   });
 
   const el = document.getElementById(elId);
@@ -1230,11 +1247,33 @@ function renderSummaryGrid(elId, monthStr) {
   el.innerHTML = (masters.companies||[]).map(c => {
     const d = g[c.key] || {kg:0,tails:0,amount:0};
     const stores = (masters.stores||[]).filter(s=>s.companyKey===c.key).map(s=>s.name).join('・');
+
+    // この請求先の単価別内訳
+    const priceItems = Object.values(gByPrice)
+      .filter(p => p.company === c.key)
+      .sort((a,b) => b.price - a.price);
+    const hasMixedPrice = priceItems.length > 1;
+
+    const priceDetail = hasMixedPrice
+      ? '<div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">' +
+        priceItems.map(p =>
+          `<div style="display:flex;justify-content:space-between;align-items:center;
+            padding:5px 8px;background:#f4f9fd;border-radius:6px;
+            border:1px solid var(--border);font-size:0.78rem">
+            <span style="color:var(--text-mid);font-weight:700">${p.price.toLocaleString()}円/kg</span>
+            <span style="color:var(--ocean);font-weight:700">${p.kg.toLocaleString()}kg</span>
+            <span style="color:var(--text-mid)">${p.tails}尾</span>
+            <span style="color:var(--salmon)">${p.amount.toLocaleString()}円</span>
+          </div>`
+        ).join('') + '</div>'
+      : '';
+
     return `<div class="sum-item">
       <div class="sum-co">${c.name}</div>
       <div class="sum-sub">${stores||'—'}</div>
       <div class="sum-kg">${d.kg.toLocaleString()}<span class="u">kg</span></div>
       <div class="sum-det">${d.tails}尾　／　${d.amount.toLocaleString()}円</div>
+      ${priceDetail}
     </div>`;
   }).join('');
 }
