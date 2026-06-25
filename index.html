@@ -1324,12 +1324,23 @@ function renderCalendar() {
   const dayMap = {};
   records.filter(r => normalizeDate(r.date).startsWith(ms)).forEach(r => {
     const dt = normalizeDate(r.date);
-    if (!dayMap[dt]) dayMap[dt] = {};
-    (masters.companies||[]).forEach(c => { if (!dayMap[dt][c.key]) dayMap[dt][c.key]={kg:0,tails:0,amount:0}; });
-    if (!dayMap[dt][r.company]) dayMap[dt][r.company]={kg:0,tails:0,amount:0};
-    dayMap[dt][r.company].kg     += parseFloat(r.kg)||0;
-    dayMap[dt][r.company].tails  += parseInt(r.tails)||0;
-    dayMap[dt][r.company].amount += parseFloat(r.amount)||0;
+    if (!dayMap[dt]) dayMap[dt] = { byCompany: {}, byCompanyPrice: {} };
+    // 請求先ごとの合計（カレンダーマス表示用）
+    if (!dayMap[dt].byCompany[r.company]) dayMap[dt].byCompany[r.company]={kg:0,tails:0,amount:0};
+    dayMap[dt].byCompany[r.company].kg     += parseFloat(r.kg)||0;
+    dayMap[dt].byCompany[r.company].tails  += parseInt(r.tails)||0;
+    dayMap[dt].byCompany[r.company].amount += parseFloat(r.amount)||0;
+    // 請求先×単価ごとの集計（詳細表示用）
+    const priceKey = r.company + '_' + (parseFloat(r.price)||0);
+    if (!dayMap[dt].byCompanyPrice[priceKey]) {
+      dayMap[dt].byCompanyPrice[priceKey] = {
+        company: r.company, companyName: r.companyName||r.company,
+        price: parseFloat(r.price)||0, kg:0, tails:0, amount:0
+      };
+    }
+    dayMap[dt].byCompanyPrice[priceKey].kg     += parseFloat(r.kg)||0;
+    dayMap[dt].byCompanyPrice[priceKey].tails  += parseInt(r.tails)||0;
+    dayMap[dt].byCompanyPrice[priceKey].amount += parseFloat(r.amount)||0;
   });
 
   const firstDow = new Date(calYear, calMonth-1, 1).getDay();
@@ -1347,8 +1358,8 @@ function renderCalendar() {
     const dow = new Date(calYear, calMonth-1, d).getDay();
     const data = dayMap[dt];
     const hasData = !!data;
-    const totKg = hasData ? Object.values(data).reduce((s,v)=>s+(v.kg||0),0) : 0;
-    const totAm = hasData ? Object.values(data).reduce((s,v)=>s+(v.amount||0),0) : 0;
+    const totKg = hasData ? Object.values(data.byCompany).reduce((s,v)=>s+(v.kg||0),0) : 0;
+    const totAm = hasData ? Object.values(data.byCompany).reduce((s,v)=>s+(v.amount||0),0) : 0;
     const cls = ['cal-cell',hasData?'has-data':'',dt===todayStr?'today':'',dt===selectedDate?'selected':''].filter(Boolean).join(' ');
     const onclick = hasData ? `onclick="selectDay('${dt}')"` : '';
     const dowCls  = dow===0?'sun':dow===6?'sat':'';
@@ -1360,7 +1371,7 @@ function renderCalendar() {
   document.getElementById('calGrid').innerHTML = html;
 
   if (selectedDate && dayMap[selectedDate]) {
-    renderDayDetail(selectedDate, dayMap[selectedDate]);
+    renderDayDetail(selectedDate, dayMap[selectedDate].byCompany, dayMap[selectedDate].byCompanyPrice);
   } else {
     document.getElementById('dayDetail').classList.remove('open');
   }
@@ -1372,20 +1383,40 @@ function selectDay(dt) {
   renderCalendar();
 }
 
-function renderDayDetail(dt, data) {
+function renderDayDetail(dt, data, dataByPrice) {
   const d = new Date(dt);
   const dow = ['日','月','火','水','木','金','土'][d.getDay()];
   document.getElementById('dayDetailTitle').textContent = `${d.getMonth()+1}月${d.getDate()}日（${dow}）の集計`;
 
   const cosHtml = (masters.companies||[]).map(c => {
     const g = data[c.key] || {kg:0,tails:0,amount:0};
-    const stores = (masters.stores||[]).filter(s=>s.companyKey===c.key).map(s=>s.name).join('・');
     const zero = g.kg === 0;
+
+    // この請求先の単価別内訳を取得
+    const priceItems = Object.values(dataByPrice||{})
+      .filter(p => p.company === c.key)
+      .sort((a,b) => b.price - a.price);
+
+    // 単価が複数ある場合は内訳を表示
+    const hasMixedPrice = priceItems.length > 1;
+    const priceDetail = hasMixedPrice
+      ? priceItems.map(p =>
+          `<div style="display:flex;justify-content:space-between;align-items:center;
+            padding:5px 8px;margin-top:5px;background:white;border-radius:6px;
+            border:1px solid var(--border);font-size:0.78rem">
+            <span style="color:var(--text-mid)">${p.price.toLocaleString()}円/kg</span>
+            <span style="font-weight:700;color:var(--ocean)">${p.kg.toLocaleString()}kg</span>
+            <span style="color:var(--text-mid)">${p.tails}尾</span>
+            <span style="color:var(--salmon)">${p.amount.toLocaleString()}円</span>
+          </div>`
+        ).join('')
+      : '';
+
     return `<div class="day-co-card ${zero?'zero':''}">
       <div class="day-co-name">${c.name}</div>
-      <div class="day-co-sub">${stores||'—'}</div>
       <div class="day-co-kg">${(g.kg||0).toLocaleString()}<span class="u">kg</span></div>
       <div class="day-co-det">${g.tails||0}尾　／　${(g.amount||0).toLocaleString()}円</div>
+      ${priceDetail}
     </div>`;
   }).join('');
   document.getElementById('dayCos').innerHTML = cosHtml;
