@@ -385,6 +385,19 @@ input[type="date"] { cursor: pointer; }
 .conn-badge.loading { background: rgba(255,255,255,0.2); color: white; }
 .conn-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 
+/* ===== 集計グラフ ===== */
+.chart-wrap { display:flex; align-items:flex-end; gap:6px; height:160px; padding:8px 0; }
+.chart-bar-group { display:flex; flex-direction:column; align-items:center; gap:3px; flex:1; min-width:36px; }
+.chart-bars { display:flex; align-items:flex-end; gap:2px; height:140px; }
+.chart-bar { border-radius:3px 3px 0 0; min-width:10px; transition:height 0.3s; cursor:default; }
+.chart-label { font-size:0.65rem; color:var(--text-mid); text-align:center; white-space:nowrap; }
+.chart-val { font-size:0.62rem; color:var(--text-light); }
+.chart-legend { display:flex; gap:12px; flex-wrap:wrap; margin-top:10px; padding:0 8px; }
+.chart-legend-item { display:flex; align-items:center; gap:5px; font-size:0.72rem; color:var(--text-mid); }
+.chart-legend-dot { width:10px; height:10px; border-radius:2px; }
+
+.period-tab-btn { font-size:0.82rem; padding:8px 18px; }
+
 /* ===== TOAST ===== */
 .toast {
   position: fixed; bottom: 24px; left: 50%;
@@ -564,17 +577,51 @@ input[type="date"] { cursor: pointer; }
 
 <!-- ========== 集計ページ ========== -->
 <div class="page" id="page-summary">
-  <div class="card">
-    <div class="card-head">
-      <span class="card-title">月別集計</span>
-      <select id="summaryMonth" onchange="renderSummaryPage()" style="width:auto;padding:4px 8px;font-size:0.78rem"></select>
+
+  <!-- 期間切り替えタブ -->
+  <div style="display:flex;gap:8px;margin-bottom:14px">
+    <button class="btn btn-primary" id="periodTabMonth" onclick="switchPeriodTab('month')" style="font-size:0.82rem;padding:8px 18px">月別</button>
+    <button class="btn btn-secondary" id="periodTabSeason" onclick="switchPeriodTab('season')" style="font-size:0.82rem;padding:8px 18px">シーズン</button>
+  </div>
+
+  <!-- 月別パネル -->
+  <div id="panelMonth">
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">月別集計　請求先別</span>
+        <select id="summaryMonth" onchange="renderSummaryPage()" style="width:auto;padding:4px 8px;font-size:0.78rem"></select>
+      </div>
+      <div class="sum-grid" id="summaryGrid"></div>
     </div>
-    <div class="sum-grid" id="summaryGrid"></div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">月別　納品先グループ別集計</span></div>
+      <div id="groupSummaryContainer"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">月別　日ごとの合計</span></div>
+      <div id="dailyTableContainer"></div>
+    </div>
   </div>
-  <div class="card">
-    <div class="card-head"><span class="card-title">月別　日ごとの合計</span></div>
-    <div id="dailyTableContainer"></div>
+
+  <!-- シーズンパネル -->
+  <div id="panelSeason" style="display:none">
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">シーズン集計</span>
+        <select id="seasonYear" onchange="renderSeasonPage()" style="width:auto;padding:4px 8px;font-size:0.78rem"></select>
+      </div>
+      <div class="sum-grid" id="seasonSummaryGrid"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">月ごとの推移　納品先グループ別</span></div>
+      <div id="seasonGroupContainer"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">月ごとの推移グラフ</span></div>
+      <div id="seasonChartContainer" style="padding:16px;overflow-x:auto"></div>
+    </div>
   </div>
+
 </div>
 
 <!-- ========== 設定ページ ========== -->
@@ -718,6 +765,17 @@ window.addEventListener('DOMContentLoaded', async () => {
       sel.appendChild(opt);
     }
   });
+
+  // シーズン年セレクト初期化
+  const seasonSel = document.getElementById('seasonYear');
+  if (seasonSel) {
+    for (let y = today.getFullYear(); y >= 2025; y--) {
+      const opt = document.createElement('option');
+      opt.value = y; opt.textContent = `${y}年シーズン（4〜9月）`;
+      if (y === today.getFullYear()) opt.selected = true;
+      seasonSel.appendChild(opt);
+    }
+  }
 
   // サーバーから最新データを取得してから描画
   // （ローカルキャッシュは使わない）
@@ -1203,12 +1261,184 @@ function renderInputSummary() {
 // ===========================
 // 集計ページ
 // ===========================
+let currentPeriodTab = 'month';
+
+function switchPeriodTab(tab) {
+  currentPeriodTab = tab;
+  document.getElementById('panelMonth').style.display  = tab==='month'  ? 'block' : 'none';
+  document.getElementById('panelSeason').style.display = tab==='season' ? 'block' : 'none';
+  document.getElementById('periodTabMonth').className  = tab==='month'  ? 'btn btn-primary period-tab-btn'  : 'btn btn-secondary period-tab-btn';
+  document.getElementById('periodTabSeason').className = tab==='season' ? 'btn btn-primary period-tab-btn' : 'btn btn-secondary period-tab-btn';
+  if (tab === 'season') renderSeasonPage();
+}
+
 function renderSummaryPage() {
   const month = parseInt(document.getElementById('summaryMonth').value);
   const year  = new Date().getFullYear();
   const ms    = `${year}-${String(month).padStart(2,'0')}`;
   renderSummaryGrid('summaryGrid', ms);
+  renderGroupSummary(ms);
   renderDailyTable(ms);
+}
+
+// 納品先グループ別集計（月別）
+function renderGroupSummary(monthStr) {
+  const el = document.getElementById('groupSummaryContainer');
+  if (!el) return;
+  const groups = masters.groups || [];
+  if (groups.length === 0) {
+    el.innerHTML = '<div class="empty-state"><p>単価グループが登録されていません</p></div>';
+    return;
+  }
+
+  // グループ×単価ごとの集計
+  const gMap = {};
+  groups.forEach(g => { gMap[g.key] = { kg:0, tails:0, amount:0, byPrice:{} }; });
+
+  records.filter(r => normalizeDate(r.date).startsWith(monthStr)).forEach(r => {
+    const store = (masters.stores||[]).find(s => s.key === r.storeKey);
+    const groupKey = store ? (store.priceGroupKey || store.companyKey) : null;
+    if (!groupKey || !gMap[groupKey]) return;
+    gMap[groupKey].kg     += parseFloat(r.kg)||0;
+    gMap[groupKey].tails  += parseInt(r.tails)||0;
+    gMap[groupKey].amount += parseFloat(r.amount)||0;
+    const pk = parseFloat(r.price)||0;
+    if (!gMap[groupKey].byPrice[pk]) gMap[groupKey].byPrice[pk] = {kg:0,tails:0,amount:0};
+    gMap[groupKey].byPrice[pk].kg     += parseFloat(r.kg)||0;
+    gMap[groupKey].byPrice[pk].tails  += parseInt(r.tails)||0;
+    gMap[groupKey].byPrice[pk].amount += parseFloat(r.amount)||0;
+  });
+
+  let html = '<div style="overflow-x:auto"><table class="tbl"><thead><tr>'
+    + '<th>グループ</th><th>納品先</th><th class="r">kg</th><th class="r">尾数</th><th class="r">金額(円)</th><th class="r">単価内訳</th>'
+    + '</tr></thead><tbody>';
+
+  groups.forEach(g => {
+    const d = gMap[g.key] || {kg:0,tails:0,amount:0,byPrice:{}};
+    const stores = (masters.stores||[])
+      .filter(s=>(s.priceGroupKey||s.companyKey)===g.key)
+      .map(s=>s.name).join('・');
+    const priceItems = Object.entries(d.byPrice).sort((a,b)=>b[0]-a[0]);
+    const priceStr = priceItems.length > 1
+      ? priceItems.map(([p,v])=>`${parseInt(p).toLocaleString()}円:${v.kg.toLocaleString()}kg`).join(' / ')
+      : priceItems.length===1 ? `${parseInt(priceItems[0][0]).toLocaleString()}円/kg` : '—';
+    html += `<tr>
+      <td style="font-weight:700">${g.name}</td>
+      <td style="font-size:0.75rem;color:var(--text-mid)">${stores||'—'}</td>
+      <td class="r" style="font-weight:700">${d.kg.toLocaleString()}</td>
+      <td class="r">${d.tails}</td>
+      <td class="r">${d.amount.toLocaleString()}</td>
+      <td style="font-size:0.75rem;color:var(--text-mid)">${priceStr}</td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
+// シーズン集計
+function renderSeasonPage() {
+  const year = parseInt(document.getElementById('seasonYear').value);
+  // 4月〜9月
+  const months = [4,5,6,7,8,9];
+  const monthStrs = months.map(m => `${year}-${String(m).padStart(2,'0')}`);
+
+  // 全体集計（請求先別）
+  const g = {};
+  (masters.companies||[]).forEach(c => { g[c.key]={kg:0,tails:0,amount:0}; });
+  records.filter(r => monthStrs.some(ms => normalizeDate(r.date).startsWith(ms))).forEach(r => {
+    if (!g[r.company]) g[r.company]={kg:0,tails:0,amount:0};
+    g[r.company].kg     += parseFloat(r.kg)||0;
+    g[r.company].tails  += parseInt(r.tails)||0;
+    g[r.company].amount += parseFloat(r.amount)||0;
+  });
+
+  const seasonGrid = document.getElementById('seasonSummaryGrid');
+  if (seasonGrid) {
+    seasonGrid.innerHTML = (masters.companies||[]).map(c => {
+      const d = g[c.key]||{kg:0,tails:0,amount:0};
+      const stores = (masters.stores||[]).filter(s=>s.companyKey===c.key).map(s=>s.name).join('・');
+      return `<div class="sum-item">
+        <div class="sum-co">${c.name}</div>
+        <div class="sum-sub">${stores||'—'}</div>
+        <div class="sum-kg">${d.kg.toLocaleString()}<span class="u">kg</span></div>
+        <div class="sum-det">${d.tails}尾　／　${d.amount.toLocaleString()}円</div>
+      </div>`;
+    }).join('');
+  }
+
+  // グループ別月次推移テーブル
+  const groups = masters.groups||[];
+  const groupMonthMap = {};
+  groups.forEach(g => { groupMonthMap[g.key] = {}; months.forEach(m=>{ groupMonthMap[g.key][m]={kg:0,tails:0}; }); });
+
+  records.filter(r => monthStrs.some(ms=>normalizeDate(r.date).startsWith(ms))).forEach(r => {
+    const store = (masters.stores||[]).find(s=>s.key===r.storeKey);
+    const gk = store?(store.priceGroupKey||store.companyKey):null;
+    if (!gk||!groupMonthMap[gk]) return;
+    const m = parseInt(normalizeDate(r.date).split('-')[1]);
+    if (!groupMonthMap[gk][m]) groupMonthMap[gk][m]={kg:0,tails:0};
+    groupMonthMap[gk][m].kg    += parseFloat(r.kg)||0;
+    groupMonthMap[gk][m].tails += parseInt(r.tails)||0;
+  });
+
+  // 推移テーブル
+  const sgc = document.getElementById('seasonGroupContainer');
+  if (sgc) {
+    let th = '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>グループ</th>';
+    months.forEach(m=>{ th+=`<th class="r">${m}月(kg)</th>`; });
+    th += '<th class="r">合計kg</th></tr></thead><tbody>';
+    groups.forEach(grp => {
+      const row = groupMonthMap[grp.key]||{};
+      const tot = months.reduce((s,m)=>s+(row[m]?row[m].kg:0),0);
+      th += `<tr><td style="font-weight:700">${grp.name}</td>`;
+      months.forEach(m=>{ th+=`<td class="r">${row[m]&&row[m].kg>0?row[m].kg.toLocaleString():'—'}</td>`; });
+      th += `<td class="r" style="font-weight:700">${tot.toLocaleString()}</td></tr>`;
+    });
+    th += '</tbody></table></div>';
+    sgc.innerHTML = th;
+  }
+
+  // グラフ描画
+  renderSeasonChart(groups, groupMonthMap, months);
+}
+
+// 棒グラフ描画
+function renderSeasonChart(groups, groupMonthMap, months) {
+  const el = document.getElementById('seasonChartContainer');
+  if (!el) return;
+
+  const colors = ['#2d6a9f','#c9614a','#2a7a50','#8b5cf6','#d97706','#db2777'];
+
+  // 最大値
+  let maxKg = 0;
+  months.forEach(m => {
+    const tot = groups.reduce((s,g)=>s+(groupMonthMap[g.key]&&groupMonthMap[g.key][m]?groupMonthMap[g.key][m].kg:0),0);
+    if (tot>maxKg) maxKg=tot;
+  });
+  if (maxKg===0) { el.innerHTML='<div class="empty-state"><p>データがありません</p></div>'; return; }
+
+  let html = '<div class="chart-wrap">';
+  months.forEach(m => {
+    html += '<div class="chart-bar-group">';
+    html += '<div class="chart-bars">';
+    groups.forEach((g,i) => {
+      const kg = groupMonthMap[g.key]&&groupMonthMap[g.key][m]?groupMonthMap[g.key][m].kg:0;
+      const h = Math.round((kg/maxKg)*130);
+      html += `<div class="chart-bar" style="height:${h}px;width:14px;background:${colors[i%colors.length]}" title="${g.name}: ${kg.toLocaleString()}kg"></div>`;
+    });
+    html += '</div>';
+    html += `<div class="chart-label">${m}月</div>`;
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // 凡例
+  html += '<div class="chart-legend">';
+  groups.forEach((g,i) => {
+    html += `<div class="chart-legend-item"><div class="chart-legend-dot" style="background:${colors[i%colors.length]}"></div>${g.name}</div>`;
+  });
+  html += '</div>';
+  el.innerHTML = html;
 }
 
 function renderSummaryGrid(elId, monthStr) {
