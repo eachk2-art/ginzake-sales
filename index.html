@@ -925,12 +925,26 @@ function normalizeDate(val, id) {
 // ===========================
 // サーバー通信
 // ===========================
-async function gasPost(payload) {
-  const res = await fetch(GAS_URL, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-  return res.json();
+async function gasPost(payload, retries = 2, timeoutMs = 25000) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error('HTTPエラー: ' + res.status);
+      return await res.json();
+    } catch (e) {
+      const isLastAttempt = attempt === retries;
+      if (isLastAttempt) throw e;
+      // 失敗したら少し待って再試行（1秒→2秒と間隔を広げる）
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+    }
+  }
 }
 
 async function gasGet(params) {
@@ -1998,15 +2012,16 @@ async function generateInvoice() {
   const statusEl = document.getElementById('invoiceStatus');
   const btn = document.getElementById('btnInvoiceGen');
 
-  btn.innerHTML = '<span class="spinner"></span> 作成中…';
+  btn.innerHTML = '<span class="spinner"></span> 作成中…（時間がかかる場合があります）';
   btn.disabled = true;
   statusEl.textContent = '';
 
   try {
+    // タイムアウトを長め（35秒）に設定し、失敗時は自動で2回まで再試行
     const result = await gasPost({
       action: 'generateInvoicePdf',
       companyKey, year, month
-    });
+    }, 2, 35000);
 
     if (result.error) {
       statusEl.innerHTML = `<span style="color:var(--red)">⚠ ${result.error}</span>`;
@@ -2015,7 +2030,6 @@ async function generateInvoice() {
     }
 
     if (result.pdfBase64) {
-      // base64をBlobに変換してダウンロード
       const byteChars = atob(result.pdfBase64);
       const byteNumbers = new Array(byteChars.length);
       for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
@@ -2035,7 +2049,7 @@ async function generateInvoice() {
       showToast('請求書PDFをダウンロードしました ✓');
     }
   } catch(e) {
-    statusEl.innerHTML = `<span style="color:var(--red)">⚠ 通信エラーが発生しました</span>`;
+    statusEl.innerHTML = `<span style="color:var(--red)">⚠ 通信エラーが発生しました（複数回再試行しましたが失敗しました）。少し時間を置いて再度お試しください。</span>`;
     showToast('通信エラーが発生しました');
   } finally {
     btn.innerHTML = '🧾 請求書PDFを作成';
