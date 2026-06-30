@@ -446,6 +446,7 @@ input[type="date"] { cursor: pointer; }
   <button class="tab-btn" onclick="showPage('list')">📋 一覧</button>
   <button class="tab-btn" onclick="showPage('calendar')">📅 暦</button>
   <button class="tab-btn" onclick="showPage('summary')">📊 集計</button>
+  <button class="tab-btn" onclick="showPage('invoice')">🧾 請求書</button>
   <button class="tab-btn" onclick="showPage('settings')">⚙️ 設定</button>
 </nav>
 
@@ -625,6 +626,38 @@ input[type="date"] { cursor: pointer; }
 </div>
 
 <!-- ========== 設定ページ ========== -->
+<div class="page" id="page-invoice">
+  <div class="card">
+    <div class="card-head"><span class="card-title">請求書PDF発行</span></div>
+    <div class="card-body">
+      <div class="form-grid" style="grid-template-columns:1fr">
+        <div class="form-group">
+          <span class="form-label">請求先</span>
+          <select id="invoiceCompany">
+            <option value="jyumonji">株式会社十文字屋</option>
+            <option value="saiki">株式会社齋喜ビル　杜の市場</option>
+            <option value="dai">有限会社ダイ</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-top:10px">
+        <div class="form-group">
+          <span class="form-label">対象年</span>
+          <select id="invoiceYear"></select>
+        </div>
+        <div class="form-group">
+          <span class="form-label">対象月</span>
+          <select id="invoiceMonth"></select>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:16px">
+        <button class="btn btn-primary" id="btnInvoiceGen" onclick="generateInvoice()">🧾 請求書PDFを作成</button>
+      </div>
+      <div id="invoiceStatus" style="margin-top:12px;font-size:0.85rem;color:var(--text-mid)"></div>
+    </div>
+  </div>
+</div>
+
 <div class="page" id="page-settings">
 
   <div class="card">
@@ -766,6 +799,24 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // 請求書ページの年月セレクト初期化
+  const invYearSel  = document.getElementById('invoiceYear');
+  const invMonthSel = document.getElementById('invoiceMonth');
+  if (invYearSel && invMonthSel) {
+    for (let y = today.getFullYear(); y >= 2025; y--) {
+      const opt = document.createElement('option');
+      opt.value = y; opt.textContent = y + '年';
+      if (y === today.getFullYear()) opt.selected = true;
+      invYearSel.appendChild(opt);
+    }
+    for (let m = 1; m <= 12; m++) {
+      const opt = document.createElement('option');
+      opt.value = m; opt.textContent = m + '月';
+      if (m === today.getMonth()+1) opt.selected = true;
+      invMonthSel.appendChild(opt);
+    }
+  }
+
   // シーズン年セレクト初期化
   const seasonSel = document.getElementById('seasonYear');
   if (seasonSel) {
@@ -790,7 +841,7 @@ function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(`page-${name}`).classList.add('active');
-  const tabs = ['input','list','calendar','summary','settings'];
+  const tabs = ['input','list','calendar','summary','invoice','settings'];
   document.querySelectorAll('.tab-btn')[tabs.indexOf(name)].classList.add('active');
   if (name === 'calendar') renderCalendar();
   if (name === 'summary')  renderSummaryPage();
@@ -1935,6 +1986,61 @@ function showToast(msg) {
   el.textContent = msg;
   el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+// ===========================
+// 請求書PDF生成
+// ===========================
+async function generateInvoice() {
+  const companyKey = document.getElementById('invoiceCompany').value;
+  const year  = document.getElementById('invoiceYear').value;
+  const month = document.getElementById('invoiceMonth').value;
+  const statusEl = document.getElementById('invoiceStatus');
+  const btn = document.getElementById('btnInvoiceGen');
+
+  btn.innerHTML = '<span class="spinner"></span> 作成中…';
+  btn.disabled = true;
+  statusEl.textContent = '';
+
+  try {
+    const result = await gasPost({
+      action: 'generateInvoicePdf',
+      companyKey, year, month
+    });
+
+    if (result.error) {
+      statusEl.innerHTML = `<span style="color:var(--red)">⚠ ${result.error}</span>`;
+      showToast('請求書の作成に失敗しました');
+      return;
+    }
+
+    if (result.pdfBase64) {
+      // base64をBlobに変換してダウンロード
+      const byteChars = atob(result.pdfBase64);
+      const byteNumbers = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = result.fileName || 'invoice.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      statusEl.innerHTML = `<span style="color:var(--green)">✓ ${result.fileName} を作成しました</span>`;
+      showToast('請求書PDFをダウンロードしました ✓');
+    }
+  } catch(e) {
+    statusEl.innerHTML = `<span style="color:var(--red)">⚠ 通信エラーが発生しました</span>`;
+    showToast('通信エラーが発生しました');
+  } finally {
+    btn.innerHTML = '🧾 請求書PDFを作成';
+    btn.disabled = false;
+  }
 }
 </script>
 </body>
