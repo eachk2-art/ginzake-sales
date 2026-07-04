@@ -407,13 +407,15 @@ input[type="date"] { cursor: pointer; }
   z-index: 150;
   background: white;
   border: 1.5px solid var(--border);
-  border-radius: 30px;
-  padding: 8px 14px;
+  border-radius: 16px;
+  padding: 10px 16px;
   display: none;
+  flex-direction: column;
   align-items: center;
   gap: 8px;
   box-shadow: 0 4px 16px rgba(26,74,107,0.2);
-  white-space: nowrap;
+  min-width: 220px;
+  max-width: 90vw;
 }
 .settings-fixed-bar.visible {
   display: flex;
@@ -708,9 +710,11 @@ input[type="date"] { cursor: pointer; }
 
   <!-- 固定保存バー（変更時のみ表示） -->
   <div class="settings-fixed-bar" id="settingsFixedBar">
-    <span style="font-size:0.78rem;color:var(--ocean);font-weight:700" id="dirtyLabel">未保存の変更</span>
-    <button class="btn btn-secondary btn-sm" onclick="cancelMastersEdit()" style="padding:6px 14px">✕ 取消</button>
-    <button class="btn-save-settings" id="btnSaveSettings" onclick="saveMastersToServer()" style="padding:6px 16px">☁️ 保存</button>
+    <div style="width:100%;text-align:center;font-size:0.78rem;color:var(--ocean);font-weight:700;padding-bottom:6px;border-bottom:1px solid var(--border)" id="dirtyLabel">未保存の変更</div>
+    <div style="width:100%;display:flex;gap:8px;justify-content:center">
+      <button class="btn btn-secondary btn-sm" onclick="cancelMastersEdit()" style="padding:7px 18px">✕ 取消</button>
+      <button class="btn-save-settings" id="btnSaveSettings" onclick="saveMastersToServer()" style="padding:7px 20px">☁️ 保存</button>
+    </div>
   </div>
 
   <div class="card">
@@ -821,6 +825,7 @@ let masters  = { companies: [], stores: [], prices: [] };
 let editingId = null;
 let mastersDirty = false; // 設定に未保存の変更があるかどうか
 let mastersChangeLog = []; // 変更履歴（最初の操作＋件数表示用）
+let mastersSnapshot = null; // 変更前のマスタのスナップショット
 let selectedDate = null;
 let calYear  = new Date().getFullYear();
 let calMonth = new Date().getMonth() + 1;
@@ -1067,6 +1072,10 @@ async function loadFromServer() {
 }
 
 function setMastersDirty(label) {
+  // 最初の変更時にスナップショットを保存
+  if (!mastersDirty) {
+    mastersSnapshot = JSON.parse(JSON.stringify(masters));
+  }
   mastersDirty = true;
   if (label) mastersChangeLog.push(label);
   const bar = document.getElementById('settingsFixedBar');
@@ -1084,6 +1093,7 @@ function setMastersDirty(label) {
 function clearMastersDirty() {
   mastersDirty = false;
   mastersChangeLog = [];
+  mastersSnapshot = null;
   const bar = document.getElementById('settingsFixedBar');
   const btn = document.getElementById('btnSaveSettings');
   const lbl = document.getElementById('dirtyLabel');
@@ -1093,9 +1103,18 @@ function clearMastersDirty() {
 }
 
 async function cancelMastersEdit() {
-  const ok = window.confirm('変更を取り消して、保存済みの状態に戻しますか？');
+  const ok = window.confirm('変更を取り消して、変更前の状態に戻しますか？');
   if (!ok) return;
-  await loadFromServer();
+  if (mastersSnapshot) {
+    // スナップショットから即座に復元（サーバー通信不要）
+    masters = JSON.parse(JSON.stringify(mastersSnapshot));
+    saveLocal();
+    buildStoreSelect();
+    renderSettings();
+  } else {
+    // スナップショットがない場合はサーバーから再読み込み
+    await loadFromServer();
+  }
   clearMastersDirty();
   showToast('変更を取り消しました');
 }
