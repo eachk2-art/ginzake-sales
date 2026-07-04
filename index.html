@@ -1089,9 +1089,9 @@ function setMastersDirty(label) {
   if (btn) btn.classList.add('blinking');
   if (pad) pad.style.height = '100px';
   if (lbl) {
-    const first = mastersChangeLog[0] || '変更あり';
-    const extra = mastersChangeLog.length > 1 ? `　他${mastersChangeLog.length - 1}件` : '';
-    lbl.textContent = first + extra;
+    const last  = mastersChangeLog[mastersChangeLog.length - 1] || '変更あり';
+    const extra = mastersChangeLog.length > 1 ? `　（他${mastersChangeLog.length - 1}件）` : '';
+    lbl.textContent = last + extra;
   }
 }
 
