@@ -398,6 +398,56 @@ input[type="date"] { cursor: pointer; }
 
 .period-tab-btn { font-size:0.82rem; padding:8px 18px; }
 
+/* ===== 設定固定バー ===== */
+.settings-fixed-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(26,74,107,0.12);
+}
+.settings-fixed-bar .bar-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-mid);
+}
+.unsaved-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--red);
+  background: var(--red-l);
+  padding: 3px 10px;
+  border-radius: 20px;
+  display: none;
+}
+.unsaved-badge.visible { display: inline; }
+
+.btn-save-settings {
+  background: var(--green); color: white;
+  border: none; border-radius: 8px;
+  padding: 9px 20px;
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 0.88rem; font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  letter-spacing: 0.05em;
+}
+.btn-save-settings:hover { background: #256644; }
+.btn-save-settings.blinking {
+  animation: saveBlink 1s ease-in-out infinite;
+}
+@keyframes saveBlink {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(46,125,82,0.4); }
+  50%       { opacity: 0.7; box-shadow: 0 0 0 6px rgba(46,125,82,0); }
+}
+
 /* ===== TOAST ===== */
 .toast {
   position: fixed; bottom: 24px; left: 50%;
@@ -660,13 +710,15 @@ input[type="date"] { cursor: pointer; }
 
 <div class="page" id="page-settings">
 
-  <div class="card">
-    <div class="card-head"><span class="card-title">接続・データ</span></div>
-    <div class="card-body">
-      <div class="btn-row">
-        <button class="btn btn-secondary btn-sm" onclick="loadFromServer()">🔄 データ再読み込み</button>
-        <button class="btn btn-secondary btn-sm" onclick="saveMastersToServer()">☁️ 設定を保存</button>
-      </div>
+  <!-- 固定保存バー -->
+  <div class="settings-fixed-bar">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="bar-title">設定</span>
+      <span class="unsaved-badge" id="unsavedBadge">未保存の変更があります</span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn btn-secondary btn-sm" onclick="loadFromServer()">🔄 再読み込み</button>
+      <button class="btn-save-settings" id="btnSaveSettings" onclick="saveMastersToServer()">☁️ 設定を保存</button>
     </div>
   </div>
 
@@ -769,6 +821,7 @@ const STORAGE_KEY = 'ginzake_v2';
 let records  = [];
 let masters  = { companies: [], stores: [], prices: [] };
 let editingId = null;
+let mastersDirty = false; // 設定に未保存の変更があるかどうか
 let selectedDate = null;
 let calYear  = new Date().getFullYear();
 let calMonth = new Date().getMonth() + 1;
@@ -838,6 +891,12 @@ window.addEventListener('DOMContentLoaded', async () => {
 // ページ切り替え
 // ===========================
 function showPage(name) {
+  // 設定ページに未保存の変更がある場合は確認
+  const currentPage = document.querySelector('.page.active');
+  if (currentPage && currentPage.id === 'page-settings' && name !== 'settings' && mastersDirty) {
+    const ok = window.confirm('設定に未保存の変更があります。保存せずに移動しますか？\n（「キャンセル」を選ぶと設定ページにとどまります）');
+    if (!ok) return;
+  }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(`page-${name}`).classList.add('active');
@@ -1008,10 +1067,27 @@ async function loadFromServer() {
   }
 }
 
+function setMastersDirty() {
+  mastersDirty = true;
+  const badge = document.getElementById('unsavedBadge');
+  const btn   = document.getElementById('btnSaveSettings');
+  if (badge) badge.classList.add('visible');
+  if (btn)   btn.classList.add('blinking');
+}
+
+function clearMastersDirty() {
+  mastersDirty = false;
+  const badge = document.getElementById('unsavedBadge');
+  const btn   = document.getElementById('btnSaveSettings');
+  if (badge) badge.classList.remove('visible');
+  if (btn)   btn.classList.remove('blinking');
+}
+
 async function saveMastersToServer() {
   try {
     await gasPost({ action: 'saveMasters', masters });
     saveLocal();
+    clearMastersDirty();
     showToast('設定を保存しました ✓');
   } catch(e) {
     showToast('保存に失敗しました');
@@ -1855,6 +1931,7 @@ function addPriceGroup() {
   masters.priceGroups.push({ groupKey: key, price, from: todayJST() });
   document.getElementById('newGroupName').value  = '';
   document.getElementById('newGroupPrice').value = '';
+  setMastersDirty();
   renderSettings();
   showToast(`${name} を追加しました`);
 }
@@ -1862,8 +1939,8 @@ function addPriceGroup() {
 function removePriceGroup(key) {
   masters.groups       = (masters.groups||[]).filter(g => g.key !== key);
   masters.priceGroups  = (masters.priceGroups||[]).filter(p => p.groupKey !== key);
-  // グループが削除されたら該当納品先のpriceGroupKeyをクリア
   (masters.stores||[]).forEach(s => { if (s.priceGroupKey === key) s.priceGroupKey = ''; });
+  setMastersDirty();
   renderSettings();
   showToast('削除しました');
 }
@@ -1871,6 +1948,7 @@ function removePriceGroup(key) {
 function updateStoreGroup(storeKey, groupKey) {
   const store = (masters.stores||[]).find(s => s.key === storeKey);
   if (store) store.priceGroupKey = groupKey;
+  setMastersDirty();
   showToast('グループを更新しました');
 }
 
@@ -1904,6 +1982,7 @@ function applyGroupPriceChange(groupKey) {
   if (!from)            { showToast('適用開始日を入力してください'); return; }
   if (!masters.priceGroups) masters.priceGroups = [];
   masters.priceGroups.push({ groupKey, price, from });
+  setMastersDirty();
   closeDeleteModal();
   document.querySelector('#deleteModal .modal').innerHTML = `
     <h3>削除の確認</h3>
@@ -1922,6 +2001,7 @@ function addCompany() {
   const key = 'co_' + Date.now();
   masters.companies.push({ key, name });
   document.getElementById('newCompanyName').value = '';
+  setMastersDirty();
   renderSettings();
   showToast(`${name} を追加しました`);
 }
@@ -1930,6 +2010,7 @@ function removeCompany(key) {
   masters.companies = masters.companies.filter(c => c.key !== key);
   masters.stores    = masters.stores.filter(s => s.companyKey !== key);
   masters.prices    = masters.prices.filter(p => p.companyKey !== key);
+  setMastersDirty();
   renderSettings();
   buildStoreSelect();
 }
@@ -1942,6 +2023,7 @@ function addStore() {
   const key = 'st_' + Date.now();
   masters.stores.push({ key, name, companyKey });
   document.getElementById('newStoreName').value = '';
+  setMastersDirty();
   renderSettings();
   buildStoreSelect();
   showToast(`${name} を追加しました`);
@@ -1949,6 +2031,7 @@ function addStore() {
 
 function removeStore(key) {
   masters.stores = masters.stores.filter(s => s.key !== key);
+  setMastersDirty();
   renderSettings();
   buildStoreSelect();
 }
