@@ -908,6 +908,10 @@ function showPage(name) {
       masters = JSON.parse(JSON.stringify(mastersSnapshot));
       saveLocal();
       buildStoreSelect();
+      renderCompanyList();
+      renderStoreList();
+      renderPriceGroupList();
+      renderStoreGroupList();
     }
     clearMastersDirty();
   }
@@ -1120,15 +1124,23 @@ async function cancelMastersEdit() {
   const ok = window.confirm('変更を取り消して、変更前の状態に戻しますか？');
   if (!ok) return;
   if (mastersSnapshot) {
-    // スナップショットから即座に復元（サーバー通信不要）
+    // スナップショットから完全復元
     masters = JSON.parse(JSON.stringify(mastersSnapshot));
-    saveLocal();
-    buildStoreSelect();
-    renderSettings();
   } else {
     // スナップショットがない場合はサーバーから再読み込み
-    await loadFromServer();
+    try {
+      const masRes = await gasGet({ action: 'getMasters' });
+      if (masRes.masters && masRes.masters.companies) masters = masRes.masters;
+    } catch(e) {}
   }
+  // ローカルにも保存して確実に反映
+  saveLocal();
+  // 全UI再構築
+  buildStoreSelect();
+  renderCompanyList();
+  renderStoreList();
+  renderPriceGroupList();
+  renderStoreGroupList();
   clearMastersDirty();
   showToast('変更を取り消しました');
 }
