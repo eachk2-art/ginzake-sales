@@ -401,37 +401,29 @@ input[type="date"] { cursor: pointer; }
 /* ===== 設定固定バー ===== */
 .settings-fixed-bar {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 150;
   background: white;
-  border-bottom: 2px solid var(--border);
-  padding: 10px 20px;
-  display: flex;
+  border: 1.5px solid var(--border);
+  border-radius: 30px;
+  padding: 8px 14px;
+  display: none;
   align-items: center;
-  justify-content: space-between;
-  box-shadow: 0 2px 8px rgba(26,74,107,0.15);
+  gap: 8px;
+  box-shadow: 0 4px 16px rgba(26,74,107,0.2);
+  white-space: nowrap;
 }
-/* 設定ページ表示中はfixedバーの高さ分だけ押し下げる */
-#page-settings.active {
-  padding-top: 58px;
+.settings-fixed-bar.visible {
+  display: flex;
 }
 .settings-fixed-bar .bar-title {
   font-size: 0.78rem;
   font-weight: 700;
   color: var(--text-mid);
 }
-.unsaved-badge {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--red);
-  background: var(--red-l);
-  padding: 3px 10px;
-  border-radius: 20px;
-  display: none;
-}
-.unsaved-badge.visible { display: inline; }
+.unsaved-badge { display: none; }
 
 .btn-save-settings {
   background: var(--green); color: white;
@@ -714,15 +706,17 @@ input[type="date"] { cursor: pointer; }
 
 <div class="page" id="page-settings">
 
-  <!-- 固定保存バー -->
-  <div class="settings-fixed-bar">
-    <div style="display:flex;align-items:center;gap:10px">
-      <span class="bar-title">設定</span>
-      <span class="unsaved-badge" id="unsavedBadge">未保存の変更があります</span>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button class="btn btn-secondary btn-sm" onclick="loadFromServer()">🔄 再読み込み</button>
-      <button class="btn-save-settings" id="btnSaveSettings" onclick="saveMastersToServer()">☁️ 設定を保存</button>
+  <!-- 固定保存バー（変更時のみ表示） -->
+  <div class="settings-fixed-bar" id="settingsFixedBar">
+    <span style="font-size:0.78rem;color:var(--text-mid);font-weight:700">未保存の変更</span>
+    <button class="btn btn-secondary btn-sm" onclick="cancelMastersEdit()" style="padding:6px 14px">✕ 取消</button>
+    <button class="btn-save-settings" id="btnSaveSettings" onclick="saveMastersToServer()" style="padding:6px 16px">☁️ 保存</button>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span class="card-title">データ管理</span></div>
+    <div class="card-body">
+      <button class="btn btn-secondary btn-sm" onclick="loadFromServer()">🔄 データ再読み込み</button>
     </div>
   </div>
 
@@ -898,7 +892,7 @@ function showPage(name) {
   // 設定ページに未保存の変更がある場合は確認
   const currentPage = document.querySelector('.page.active');
   if (currentPage && currentPage.id === 'page-settings' && name !== 'settings' && mastersDirty) {
-    const ok = window.confirm('設定に未保存の変更があります。保存せずに移動しますか？\n（「キャンセル」を選ぶと設定ページにとどまります）');
+    const ok = window.confirm('設定に未保存の変更があります。\n保存せずに移動しますか？');
     if (!ok) return;
   }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -1073,18 +1067,26 @@ async function loadFromServer() {
 
 function setMastersDirty() {
   mastersDirty = true;
-  const badge = document.getElementById('unsavedBadge');
-  const btn   = document.getElementById('btnSaveSettings');
-  if (badge) badge.classList.add('visible');
-  if (btn)   btn.classList.add('blinking');
+  const bar = document.getElementById('settingsFixedBar');
+  const btn = document.getElementById('btnSaveSettings');
+  if (bar) bar.classList.add('visible');
+  if (btn) btn.classList.add('blinking');
 }
 
 function clearMastersDirty() {
   mastersDirty = false;
-  const badge = document.getElementById('unsavedBadge');
-  const btn   = document.getElementById('btnSaveSettings');
-  if (badge) badge.classList.remove('visible');
-  if (btn)   btn.classList.remove('blinking');
+  const bar = document.getElementById('settingsFixedBar');
+  const btn = document.getElementById('btnSaveSettings');
+  if (bar) bar.classList.remove('visible');
+  if (btn) btn.classList.remove('blinking');
+}
+
+async function cancelMastersEdit() {
+  const ok = window.confirm('変更を取り消して、保存済みの状態に戻しますか？');
+  if (!ok) return;
+  await loadFromServer();
+  clearMastersDirty();
+  showToast('変更を取り消しました');
 }
 
 async function saveMastersToServer() {
