@@ -405,16 +405,16 @@ input[type="date"] { cursor: pointer; }
   left: 50%;
   transform: translateX(-50%);
   z-index: 150;
-  background: white;
-  border: 1.5px solid var(--border);
+  background: var(--ocean);
+  border: 2.5px solid #7ec8f0;
   border-radius: 16px;
-  padding: 10px 16px;
+  padding: 10px 18px;
   display: none;
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  box-shadow: 0 4px 16px rgba(26,74,107,0.2);
-  min-width: 220px;
+  box-shadow: 0 4px 20px rgba(26,74,107,0.45);
+  min-width: 240px;
   max-width: 90vw;
 }
 .settings-fixed-bar.visible {
@@ -710,9 +710,9 @@ input[type="date"] { cursor: pointer; }
 
   <!-- 固定保存バー（変更時のみ表示） -->
   <div class="settings-fixed-bar" id="settingsFixedBar">
-    <div style="width:100%;text-align:center;font-size:0.78rem;color:var(--ocean);font-weight:700;padding-bottom:6px;border-bottom:1px solid var(--border)" id="dirtyLabel">未保存の変更</div>
+    <div style="width:100%;text-align:center;font-size:0.82rem;color:white;font-weight:700;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.3)" id="dirtyLabel">未保存の変更</div>
     <div style="width:100%;display:flex;gap:8px;justify-content:center">
-      <button class="btn btn-secondary btn-sm" onclick="cancelMastersEdit()" style="padding:7px 18px">✕ 取消</button>
+      <button class="btn btn-secondary btn-sm" onclick="cancelMastersEdit()" style="padding:7px 18px;background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.4)">✕ 取消</button>
       <button class="btn-save-settings" id="btnSaveSettings" onclick="saveMastersToServer()" style="padding:7px 20px">☁️ 保存</button>
     </div>
   </div>
@@ -791,6 +791,9 @@ input[type="date"] { cursor: pointer; }
       <div id="storeGroupList"></div>
     </div>
   </div>
+
+  <!-- フローティングバー分の余白 -->
+  <div id="settingsBottomPadding" style="height:0px;transition:height 0.2s"></div>
 
 </div><!-- /settings -->
 
@@ -1081,8 +1084,10 @@ function setMastersDirty(label) {
   const bar = document.getElementById('settingsFixedBar');
   const btn = document.getElementById('btnSaveSettings');
   const lbl = document.getElementById('dirtyLabel');
+  const pad = document.getElementById('settingsBottomPadding');
   if (bar) bar.classList.add('visible');
   if (btn) btn.classList.add('blinking');
+  if (pad) pad.style.height = '100px';
   if (lbl) {
     const first = mastersChangeLog[0] || '変更あり';
     const extra = mastersChangeLog.length > 1 ? `　他${mastersChangeLog.length - 1}件` : '';
@@ -1097,8 +1102,10 @@ function clearMastersDirty() {
   const bar = document.getElementById('settingsFixedBar');
   const btn = document.getElementById('btnSaveSettings');
   const lbl = document.getElementById('dirtyLabel');
+  const pad = document.getElementById('settingsBottomPadding');
   if (bar) bar.classList.remove('visible');
   if (btn) btn.classList.remove('blinking');
+  if (pad) pad.style.height = '0px';
   if (lbl) lbl.textContent = '未保存の変更';
 }
 
