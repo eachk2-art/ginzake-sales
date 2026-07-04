@@ -903,6 +903,13 @@ function showPage(name) {
   if (currentPage && currentPage.id === 'page-settings' && name !== 'settings' && mastersDirty) {
     const ok = window.confirm('設定に未保存の変更があります。\n保存せずに移動しますか？');
     if (!ok) return;
+    // 保存せずに移動する場合はスナップショットから復元
+    if (mastersSnapshot) {
+      masters = JSON.parse(JSON.stringify(mastersSnapshot));
+      saveLocal();
+      buildStoreSelect();
+    }
+    clearMastersDirty();
   }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
