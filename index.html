@@ -400,18 +400,22 @@ input[type="date"] { cursor: pointer; }
 
 /* ===== 設定固定バー ===== */
 .settings-fixed-bar {
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 50;
+  left: 0;
+  right: 0;
+  z-index: 150;
   background: white;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 16px;
-  margin-bottom: 16px;
+  border-bottom: 2px solid var(--border);
+  padding: 10px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 2px 8px rgba(26,74,107,0.12);
+  box-shadow: 0 2px 8px rgba(26,74,107,0.15);
+}
+/* 設定ページ表示中はfixedバーの高さ分だけ押し下げる */
+#page-settings.active {
+  padding-top: 58px;
 }
 .settings-fixed-bar .bar-title {
   font-size: 0.78rem;
