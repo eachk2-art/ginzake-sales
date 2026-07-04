@@ -708,7 +708,7 @@ input[type="date"] { cursor: pointer; }
 
   <!-- 固定保存バー（変更時のみ表示） -->
   <div class="settings-fixed-bar" id="settingsFixedBar">
-    <span style="font-size:0.78rem;color:var(--text-mid);font-weight:700">未保存の変更</span>
+    <span style="font-size:0.78rem;color:var(--ocean);font-weight:700" id="dirtyLabel">未保存の変更</span>
     <button class="btn btn-secondary btn-sm" onclick="cancelMastersEdit()" style="padding:6px 14px">✕ 取消</button>
     <button class="btn-save-settings" id="btnSaveSettings" onclick="saveMastersToServer()" style="padding:6px 16px">☁️ 保存</button>
   </div>
@@ -820,6 +820,7 @@ let records  = [];
 let masters  = { companies: [], stores: [], prices: [] };
 let editingId = null;
 let mastersDirty = false; // 設定に未保存の変更があるかどうか
+let mastersChangeLog = []; // 変更履歴（最初の操作＋件数表示用）
 let selectedDate = null;
 let calYear  = new Date().getFullYear();
 let calMonth = new Date().getMonth() + 1;
@@ -1065,20 +1066,30 @@ async function loadFromServer() {
   }
 }
 
-function setMastersDirty() {
+function setMastersDirty(label) {
   mastersDirty = true;
+  if (label) mastersChangeLog.push(label);
   const bar = document.getElementById('settingsFixedBar');
   const btn = document.getElementById('btnSaveSettings');
+  const lbl = document.getElementById('dirtyLabel');
   if (bar) bar.classList.add('visible');
   if (btn) btn.classList.add('blinking');
+  if (lbl) {
+    const first = mastersChangeLog[0] || '変更あり';
+    const extra = mastersChangeLog.length > 1 ? `　他${mastersChangeLog.length - 1}件` : '';
+    lbl.textContent = first + extra;
+  }
 }
 
 function clearMastersDirty() {
   mastersDirty = false;
+  mastersChangeLog = [];
   const bar = document.getElementById('settingsFixedBar');
   const btn = document.getElementById('btnSaveSettings');
+  const lbl = document.getElementById('dirtyLabel');
   if (bar) bar.classList.remove('visible');
   if (btn) btn.classList.remove('blinking');
+  if (lbl) lbl.textContent = '未保存の変更';
 }
 
 async function cancelMastersEdit() {
@@ -1937,16 +1948,17 @@ function addPriceGroup() {
   masters.priceGroups.push({ groupKey: key, price, from: todayJST() });
   document.getElementById('newGroupName').value  = '';
   document.getElementById('newGroupPrice').value = '';
-  setMastersDirty();
+  setMastersDirty(`単価グループを追加：${name}`);
   renderSettings();
   showToast(`${name} を追加しました`);
 }
 
 function removePriceGroup(key) {
+  const removedGrp = (masters.groups||[]).find(g=>g.key===key);
   masters.groups       = (masters.groups||[]).filter(g => g.key !== key);
   masters.priceGroups  = (masters.priceGroups||[]).filter(p => p.groupKey !== key);
   (masters.stores||[]).forEach(s => { if (s.priceGroupKey === key) s.priceGroupKey = ''; });
-  setMastersDirty();
+  setMastersDirty(`単価グループを削除：${removedGrp?removedGrp.name:''}`);
   renderSettings();
   showToast('削除しました');
 }
@@ -1954,7 +1966,8 @@ function removePriceGroup(key) {
 function updateStoreGroup(storeKey, groupKey) {
   const store = (masters.stores||[]).find(s => s.key === storeKey);
   if (store) store.priceGroupKey = groupKey;
-  setMastersDirty();
+  const grp = (masters.groups||[]).find(g=>g.key===groupKey);
+  setMastersDirty(`グループ変更：${store?store.name:''} → ${grp?grp.name:''}`);
   showToast('グループを更新しました');
 }
 
@@ -1988,7 +2001,8 @@ function applyGroupPriceChange(groupKey) {
   if (!from)            { showToast('適用開始日を入力してください'); return; }
   if (!masters.priceGroups) masters.priceGroups = [];
   masters.priceGroups.push({ groupKey, price, from });
-  setMastersDirty();
+  const chGrp = (masters.groups||[]).find(g=>g.key===groupKey);
+  setMastersDirty(`単価を変更：${chGrp?chGrp.name:''} → ${price.toLocaleString()}円（${from}〜）`);
   closeDeleteModal();
   document.querySelector('#deleteModal .modal').innerHTML = `
     <h3>削除の確認</h3>
@@ -2007,16 +2021,17 @@ function addCompany() {
   const key = 'co_' + Date.now();
   masters.companies.push({ key, name });
   document.getElementById('newCompanyName').value = '';
-  setMastersDirty();
+  setMastersDirty(`請求先を追加：${name}`);
   renderSettings();
   showToast(`${name} を追加しました`);
 }
 
 function removeCompany(key) {
+  const removedCo = (masters.companies||[]).find(c=>c.key===key);
   masters.companies = masters.companies.filter(c => c.key !== key);
   masters.stores    = masters.stores.filter(s => s.companyKey !== key);
   masters.prices    = masters.prices.filter(p => p.companyKey !== key);
-  setMastersDirty();
+  setMastersDirty(`請求先を削除：${removedCo?removedCo.name:''}`);
   renderSettings();
   buildStoreSelect();
 }
@@ -2029,15 +2044,16 @@ function addStore() {
   const key = 'st_' + Date.now();
   masters.stores.push({ key, name, companyKey });
   document.getElementById('newStoreName').value = '';
-  setMastersDirty();
+  setMastersDirty(`店舗を追加：${name}`);
   renderSettings();
   buildStoreSelect();
   showToast(`${name} を追加しました`);
 }
 
 function removeStore(key) {
+  const removedSt = (masters.stores||[]).find(s=>s.key===key);
   masters.stores = masters.stores.filter(s => s.key !== key);
-  setMastersDirty();
+  setMastersDirty(`店舗を削除：${removedSt?removedSt.name:''}`);
   renderSettings();
   buildStoreSelect();
 }
