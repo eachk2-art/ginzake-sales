@@ -398,6 +398,21 @@ input[type="date"] { cursor: pointer; }
 
 .period-tab-btn { font-size:0.82rem; padding:8px 18px; }
 
+/* ===== 設定セクション折りたたみ ===== */
+.setting-card-head {
+  padding: 12px 18px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--ocean-light);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer; user-select: none;
+}
+.setting-card-head:hover { background: #daeaf6; }
+.setting-card-title { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; color: var(--ocean); text-transform: uppercase; }
+.setting-card-arrow { font-size: 0.72rem; color: var(--text-mid); transition: transform 0.2s; }
+.setting-card-arrow.open { transform: rotate(180deg); }
+.setting-card-body { display: none; padding: 18px; }
+.setting-card-body.open { display: block; }
+
 /* ===== 設定固定バー ===== */
 .settings-fixed-bar {
   position: fixed;
@@ -725,8 +740,11 @@ input[type="date"] { cursor: pointer; }
   </div>
 
   <div class="card">
-    <div class="card-head"><span class="card-title">請求先会社</span></div>
-    <div class="card-body">
+    <div class="setting-card-head" onclick="toggleSettingSection('sectionCompany','arrowCompany')">
+      <span class="setting-card-title">請求先会社</span>
+      <span class="setting-card-arrow" id="arrowCompany">▼</span>
+    </div>
+    <div class="setting-card-body" id="sectionCompany">
       <div class="setting-section">
         <div class="master-list" id="companyList"></div>
         <div class="add-form">
@@ -741,8 +759,11 @@ input[type="date"] { cursor: pointer; }
   </div>
 
   <div class="card">
-    <div class="card-head"><span class="card-title">店舗・納品先</span></div>
-    <div class="card-body">
+    <div class="setting-card-head" onclick="toggleSettingSection('sectionStore','arrowStore')">
+      <span class="setting-card-title">店舗・納品先</span>
+      <span class="setting-card-arrow" id="arrowStore">▼</span>
+    </div>
+    <div class="setting-card-body" id="sectionStore">
       <div class="setting-section">
         <div class="master-list" id="storeList"></div>
         <div class="add-form">
@@ -754,6 +775,12 @@ input[type="date"] { cursor: pointer; }
             <span class="form-label">請求先会社</span>
             <select id="newStoreCompany"></select>
           </div>
+          <div class="form-group">
+            <span class="form-label">単価グループ</span>
+            <select id="newStorePriceGroup">
+              <option value="">選択してください</option>
+            </select>
+          </div>
           <button class="btn btn-primary btn-sm" onclick="addStore()">＋ 追加</button>
         </div>
       </div>
@@ -761,8 +788,11 @@ input[type="date"] { cursor: pointer; }
   </div>
 
   <div class="card">
-    <div class="card-head"><span class="card-title">単価グループ</span></div>
-    <div class="card-body">
+    <div class="setting-card-head" onclick="toggleSettingSection('sectionPriceGroup','arrowPriceGroup')">
+      <span class="setting-card-title">単価グループ</span>
+      <span class="setting-card-arrow" id="arrowPriceGroup">▼</span>
+    </div>
+    <div class="setting-card-body" id="sectionPriceGroup">
       <p style="font-size:0.78rem;color:var(--text-mid);margin-bottom:14px">納品先ごとにグループを設定します。グループの単価を変えると、そのグループ全店に反映されます。</p>
       <div id="priceGroupList"></div>
       <div style="margin-top:14px">
@@ -785,8 +815,11 @@ input[type="date"] { cursor: pointer; }
   </div>
 
   <div class="card">
-    <div class="card-head"><span class="card-title">納品先のグループ設定</span></div>
-    <div class="card-body">
+    <div class="setting-card-head" onclick="toggleSettingSection('sectionStoreGroup','arrowStoreGroup')">
+      <span class="setting-card-title">納品先のグループ設定</span>
+      <span class="setting-card-arrow" id="arrowStoreGroup">▼</span>
+    </div>
+    <div class="setting-card-body" id="sectionStoreGroup">
       <p style="font-size:0.78rem;color:var(--text-mid);margin-bottom:14px">各納品先がどの単価グループに属するか設定します。</p>
       <div id="storeGroupList"></div>
     </div>
@@ -1126,22 +1159,25 @@ async function cancelMastersEdit() {
   if (mastersSnapshot) {
     // スナップショットから完全復元
     masters = JSON.parse(JSON.stringify(mastersSnapshot));
+    saveLocal();
   } else {
     // スナップショットがない場合はサーバーから再読み込み
     try {
       const masRes = await gasGet({ action: 'getMasters' });
-      if (masRes.masters && masRes.masters.companies) masters = masRes.masters;
+      if (masRes.masters && masRes.masters.companies) {
+        masters = masRes.masters;
+        saveLocal();
+      }
     } catch(e) {}
   }
-  // ローカルにも保存して確実に反映
-  saveLocal();
-  // 全UI再構築
+  clearMastersDirty();
+  // 少し待ってからUI再構築（データ確定後に描画）
+  await new Promise(r => setTimeout(r, 50));
   buildStoreSelect();
   renderCompanyList();
   renderStoreList();
   renderPriceGroupList();
   renderStoreGroupList();
-  clearMastersDirty();
   showToast('変更を取り消しました');
 }
 
@@ -1934,7 +1970,14 @@ function renderCompanyList() {
 
   // 店舗追加フォームの会社セレクト更新
   const sel = document.getElementById('newStoreCompany');
-  sel.innerHTML = (masters.companies||[]).map(c=>`<option value="${c.key}">${c.name}</option>`).join('');
+  if (sel) sel.innerHTML = (masters.companies||[]).map(c=>`<option value="${c.key}">${c.name}</option>`).join('');
+
+  // 店舗追加フォームの単価グループセレクト更新
+  const gsel = document.getElementById('newStorePriceGroup');
+  if (gsel) {
+    gsel.innerHTML = '<option value="">選択してください</option>' +
+      (masters.groups||[]).map(g=>`<option value="${g.key}">${g.name}</option>`).join('');
+  }
 }
 
 function renderStoreList() {
@@ -1950,6 +1993,14 @@ function renderStoreList() {
 function renderPriceGroupList() {
   const el = document.getElementById('priceGroupList');
   if (!el) return;
+
+  // 店舗追加フォームの単価グループセレクトも更新
+  const gsel = document.getElementById('newStorePriceGroup');
+  if (gsel) {
+    gsel.innerHTML = '<option value="">選択してください</option>' +
+      (masters.groups||[]).map(g=>`<option value="${g.key}">${g.name}</option>`).join('');
+  }
+
   const groups = masters.groups || [];
   el.innerHTML = groups.map(g => {
     const current = getPriceForGroup(g.key, todayJST());
@@ -2082,12 +2133,14 @@ function removeCompany(key) {
 }
 
 function addStore() {
-  const name       = document.getElementById('newStoreName').value.trim();
-  const companyKey = document.getElementById('newStoreCompany').value;
-  if (!name)       { showToast('店舗名を入力してください'); return; }
-  if (!companyKey) { showToast('請求先を選んでください'); return; }
+  const name          = document.getElementById('newStoreName').value.trim();
+  const companyKey    = document.getElementById('newStoreCompany').value;
+  const priceGroupKey = document.getElementById('newStorePriceGroup').value;
+  if (!name)          { showToast('店舗名を入力してください'); return; }
+  if (!companyKey)    { showToast('請求先を選んでください'); return; }
+  if (!priceGroupKey) { showToast('単価グループを選んでください'); return; }
   const key = 'st_' + Date.now();
-  masters.stores.push({ key, name, companyKey });
+  masters.stores.push({ key, name, companyKey, priceGroupKey });
   document.getElementById('newStoreName').value = '';
   setMastersDirty(`店舗を追加：${name}`);
   renderSettings();
@@ -2150,6 +2203,17 @@ function showToast(msg) {
   el.textContent = msg;
   el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+// ===========================
+// 設定セクション折りたたみ
+// ===========================
+function toggleSettingSection(sectionId, arrowId) {
+  const section = document.getElementById(sectionId);
+  const arrow   = document.getElementById(arrowId);
+  if (!section) return;
+  const isOpen = section.classList.toggle('open');
+  if (arrow) arrow.classList.toggle('open', isOpen);
 }
 
 // ===========================
