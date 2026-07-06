@@ -1154,31 +1154,11 @@ function clearMastersDirty() {
 }
 
 async function cancelMastersEdit() {
-  const ok = window.confirm('変更を取り消して、変更前の状態に戻しますか？');
+  const ok = window.confirm('変更を取り消しますか？\nページを再読み込みして変更前の状態に戻します。');
   if (!ok) return;
-  if (mastersSnapshot) {
-    // スナップショットから完全復元
-    masters = JSON.parse(JSON.stringify(mastersSnapshot));
-    saveLocal();
-  } else {
-    // スナップショットがない場合はサーバーから再読み込み
-    try {
-      const masRes = await gasGet({ action: 'getMasters' });
-      if (masRes.masters && masRes.masters.companies) {
-        masters = masRes.masters;
-        saveLocal();
-      }
-    } catch(e) {}
-  }
-  clearMastersDirty();
-  // 少し待ってからUI再構築（データ確定後に描画）
-  await new Promise(r => setTimeout(r, 50));
-  buildStoreSelect();
-  renderCompanyList();
-  renderStoreList();
-  renderPriceGroupList();
-  renderStoreGroupList();
-  showToast('変更を取り消しました');
+  // ローカルキャッシュを削除してからリロード（サーバーから最新データを取得）
+  localStorage.removeItem(STORAGE_KEY);
+  location.reload();
 }
 
 async function saveMastersToServer() {
