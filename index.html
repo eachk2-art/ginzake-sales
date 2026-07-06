@@ -925,6 +925,13 @@ window.addEventListener('DOMContentLoaded', async () => {
   // （ローカルキャッシュは使わない）
   localStorage.removeItem(STORAGE_KEY);
   await loadFromServer();
+
+  // 取消後のリロード時は設定ページに戻る
+  const returnTo = sessionStorage.getItem('returnToPage');
+  if (returnTo) {
+    sessionStorage.removeItem('returnToPage');
+    showPage(returnTo);
+  }
 });
 
 // ===========================
@@ -1156,7 +1163,9 @@ function clearMastersDirty() {
 async function cancelMastersEdit() {
   const ok = window.confirm('変更を取り消しますか？\nページを再読み込みして変更前の状態に戻します。');
   if (!ok) return;
-  // ローカルキャッシュを削除してからリロード（サーバーから最新データを取得）
+  // リロード後に設定ページを開くフラグを保存
+  sessionStorage.setItem('returnToPage', 'settings');
+  // ローカルキャッシュを削除してからリロード
   localStorage.removeItem(STORAGE_KEY);
   location.reload();
 }
