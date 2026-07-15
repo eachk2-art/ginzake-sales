@@ -684,6 +684,14 @@ input[type="date"] { cursor: pointer; }
       <div class="card-head"><span class="card-title">月ごとの推移グラフ</span></div>
       <div id="seasonChartContainer" style="padding:16px;overflow-x:auto"></div>
     </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">納品先別　累計（月別積み上げ）</span></div>
+      <div id="storeStackChart" style="padding:14px 12px"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">請求先別　累計（月別積み上げ）</span></div>
+      <div id="companyStackChart" style="padding:14px 12px"></div>
+    </div>
   </div>
 
 </div>
@@ -1628,6 +1636,82 @@ function renderSeasonPage() {
 
   // グラフ描画
   renderSeasonChart(groups, groupMonthMap, months);
+
+  // 納品先別・請求先別 積み上げグラフ
+  renderStackCharts(months, monthStrs);
+}
+
+// ===== 横向き積み上げグラフ（納品先別・請求先別） =====
+function renderStackCharts(months, monthStrs) {
+  // 月ごとの色（4月〜9月）
+  const monthColors = { 4:'#2d6a9f', 5:'#5fa3d0', 6:'#2a7a50', 7:'#8bbf4d', 8:'#d97706', 9:'#c9614a' };
+
+  const storeMap = {};   // 納品先別
+  const compMap  = {};   // 請求先別
+
+  records.filter(r => monthStrs.some(ms => normalizeDate(r.date).startsWith(ms))).forEach(r => {
+    const m  = parseInt(normalizeDate(r.date).split('-')[1]);
+    const kg = parseFloat(r.kg)||0;
+    if (kg <= 0) return;
+
+    // 納品先
+    const store = (masters.stores||[]).find(s => s.key === r.storeKey);
+    const sName = store ? store.name : (r.storeKey || '不明');
+    if (!storeMap[sName]) storeMap[sName] = { name:sName, total:0, byMonth:{} };
+    storeMap[sName].total += kg;
+    storeMap[sName].byMonth[m] = (storeMap[sName].byMonth[m]||0) + kg;
+
+    // 請求先
+    const comp  = (masters.companies||[]).find(c => c.key === r.company);
+    const cName = comp ? comp.name : (r.company || '不明');
+    if (!compMap[cName]) compMap[cName] = { name:cName, total:0, byMonth:{} };
+    compMap[cName].total += kg;
+    compMap[cName].byMonth[m] = (compMap[cName].byMonth[m]||0) + kg;
+  });
+
+  renderHStackChart('storeStackChart',   Object.values(storeMap), months, monthColors);
+  renderHStackChart('companyStackChart', Object.values(compMap),  months, monthColors);
+}
+
+// 横棒の積み上げグラフ描画（縦軸＝納品先/請求先、数量が多い順）
+function renderHStackChart(elId, rows, months, monthColors) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+
+  rows = rows.filter(r => r.total > 0).sort((a,b) => b.total - a.total);
+  if (rows.length === 0) {
+    el.innerHTML = '<div class="empty-state"><p>データがありません</p></div>';
+    return;
+  }
+
+  const maxTotal = rows[0].total;
+
+  let html = '<div style="display:flex;flex-direction:column;gap:11px">';
+  rows.forEach(r => {
+    html += `<div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">
+        <span style="font-size:0.78rem;font-weight:700;color:var(--text-mid)">${r.name}</span>
+        <span style="font-size:0.82rem;font-weight:700;color:var(--ocean)">${Math.round(r.total).toLocaleString()}<span style="font-size:0.68rem;font-weight:500;color:var(--text-light)">kg</span></span>
+      </div>
+      <div style="display:flex;height:20px;border-radius:5px;overflow:hidden;background:var(--ocean-pale)">`;
+    months.forEach(m => {
+      const kg = r.byMonth[m]||0;
+      if (kg <= 0) return;
+      const w = (kg / maxTotal) * 100;
+      html += `<div style="width:${w}%;background:${monthColors[m]||'#999'}" title="${m}月: ${kg.toLocaleString()}kg"></div>`;
+    });
+    html += '</div></div>';
+  });
+  html += '</div>';
+
+  // 凡例（月）
+  html += '<div class="chart-legend" style="margin-top:14px">';
+  months.forEach(m => {
+    html += `<div class="chart-legend-item"><div class="chart-legend-dot" style="background:${monthColors[m]||'#999'}"></div>${m}月</div>`;
+  });
+  html += '</div>';
+
+  el.innerHTML = html;
 }
 
 // 棒グラフ描画
