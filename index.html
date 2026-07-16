@@ -923,7 +923,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (seasonSel) {
     for (let y = today.getFullYear(); y >= 2025; y--) {
       const opt = document.createElement('option');
-      opt.value = y; opt.textContent = `${y}年シーズン（4〜9月）`;
+      opt.value = y; opt.textContent = `${y}年シーズン（3〜8月）`;
       if (y === today.getFullYear()) opt.selected = true;
       seasonSel.appendChild(opt);
     }
@@ -1575,7 +1575,7 @@ function renderGroupSummary(monthStr) {
 function renderSeasonPage() {
   const year = parseInt(document.getElementById('seasonYear').value);
   // 4月〜9月
-  const months = [4,5,6,7,8,9];
+  const months = [3,4,5,6,7,8];
   const monthStrs = months.map(m => `${year}-${String(m).padStart(2,'0')}`);
 
   // 全体集計（請求先別）
@@ -1644,7 +1644,7 @@ function renderSeasonPage() {
 // ===== 横向き積み上げグラフ（納品先別・請求先別） =====
 function renderStackCharts(months, monthStrs) {
   // 月ごとの色（4月〜9月）
-  const monthColors = { 4:'#2d6a9f', 5:'#5fa3d0', 6:'#2a7a50', 7:'#8bbf4d', 8:'#d97706', 9:'#c9614a' };
+  const monthColors = { 3:'#7b68ee', 4:'#2d6a9f', 5:'#5fa3d0', 6:'#2a7a50', 7:'#8bbf4d', 8:'#d97706' };
 
   const storeMap = {};   // 納品先別
   const compMap  = {};   // 請求先別
